@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+.env
+.env.local
+.env.*.local
+.env.local.generated
+.local-backup-before-nest-hardening
+.local-backup-before-aws-ministack-hardening
+var/ministack
+
+# IDEs
+.idea
+.vscode
+
+# OS files
+.DS_Store
