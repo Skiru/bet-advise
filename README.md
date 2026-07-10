@@ -707,20 +707,7 @@ An expert-level analysis of the application codebase reveals several patterns, s
 
 ### 10.2 Critical Issues & Refactoring Opportunities
 
-#### Issue 1: Misleading Naming — `PrismaHealthIndicator`
-*   **Location:** `src/shared/infrastructure/health/prisma-health.indicator.ts`
-*   **Problem:** The health indicator is named `PrismaHealthIndicator` and is registered under the key `database` in the health controller. However, the class does not use Prisma; it injects and delegates to NestJS's `TypeOrmHealthIndicator`:
-    ```typescript
-    @Injectable()
-    export class PrismaHealthIndicator extends HealthIndicator {
-      constructor(private readonly typeOrm: TypeOrmHealthIndicator) { ... }
-      async isHealthy(key: string) { return this.typeOrm.pingCheck(key); }
-    }
-    ```
-*   **Impact:** Causes developer confusion regarding the data layer, suggesting a dual-ORM setup where none exists.
-*   **Refactoring Action:** Rename the file to `database-health.indicator.ts` and the class to `DatabaseHealthIndicator` to match the TypeORM database layer.
-
-#### Issue 2: Transaction Connection Leak Risk — Manually Handled QueryRunner
+#### Issue 1: Transaction Connection Leak Risk — Manually Handled QueryRunner
 *   **Location:** `src/advice/infrastructure/typeorm-advice.repository.ts`, lines 58-104
 *   **Problem:** The `createWithOutbox` method manages database connections manually. However, the `try` block starts *after* `connect()` and `startTransaction()` have already been called:
     ```typescript

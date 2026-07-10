@@ -10,11 +10,13 @@ import { ListMatchesHandler } from './application/handlers/list-matches.handler'
 import { MatchesController } from './interfaces/http/matches.controller';
 import { MATCHES_MODULE_API } from './interfaces/module-api/matches-module.api.interface';
 import { MatchesModuleApi } from './interfaces/module-api/matches-module.api';
+import { MatchMapper } from './infrastructure/match.mapper';
 
 @Module({
   imports: [CqrsModule, TypeOrmModule.forFeature([MatchEntity])],
   controllers: [MatchesController],
   providers: [
+    MatchMapper,
     {
       provide: MATCH_REPOSITORY_PORT,
       useClass: TypeOrmMatchRepository,

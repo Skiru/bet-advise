@@ -4,9 +4,9 @@ import { Repository, DataSource } from 'typeorm';
 import { AdviceEntity } from './entities/advice.entity';
 import { OutboxEventEntity } from '../../outbox/infrastructure/entities/outbox-event.entity';
 import { Advice } from '../domain/advice.entity';
-import { AdviceStatus } from '../domain/advice-status.enum';
 import { generateUuidV7 } from '../../shared/domain/uuid';
 import { IAdviceRepository } from '../application/ports/advice-repository.port';
+import { AdviceMapper } from './advice.mapper';
 
 @Injectable()
 export class TypeOrmAdviceRepository implements IAdviceRepository {
@@ -14,26 +14,13 @@ export class TypeOrmAdviceRepository implements IAdviceRepository {
     @InjectRepository(AdviceEntity)
     private readonly repo: Repository<AdviceEntity>,
     private readonly dataSource: DataSource,
+    private readonly mapper: AdviceMapper,
   ) {}
-
-  private mapToDomain(entity: AdviceEntity): Advice {
-    return Advice.create(
-      entity.id,
-      entity.matchId,
-      entity.market,
-      entity.selection,
-      entity.confidence,
-      entity.rationale,
-      entity.status as AdviceStatus,
-      entity.createdAt,
-      entity.updatedAt,
-    );
-  }
 
   async findById(id: string): Promise<Advice | null> {
     const entity = await this.repo.findOne({ where: { id } });
     if (!entity) return null;
-    return this.mapToDomain(entity);
+    return this.mapper.toDomain(entity);
   }
 
   async findByMatchId(matchId: string): Promise<Advice[]> {
@@ -41,12 +28,12 @@ export class TypeOrmAdviceRepository implements IAdviceRepository {
       where: { matchId },
       order: { createdAt: 'DESC' },
     });
-    return entities.map((e) => this.mapToDomain(e));
+    return entities.map((e) => this.mapper.toDomain(e));
   }
 
   async findAll(): Promise<Advice[]> {
     const entities = await this.repo.find({ order: { createdAt: 'DESC' } });
-    return entities.map((e) => this.mapToDomain(e));
+    return entities.map((e) => this.mapper.toDomain(e));
   }
 
   async createWithOutbox(data: {
@@ -96,7 +83,7 @@ export class TypeOrmAdviceRepository implements IAdviceRepository {
       await queryRunner.manager.save(OutboxEventEntity, outboxEventEntity);
 
       await queryRunner.commitTransaction();
-      return this.mapToDomain(savedAdvice);
+      return this.mapper.toDomain(savedAdvice);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;

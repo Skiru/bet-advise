@@ -1,6 +1,9 @@
 import { Controller, Get } from '@nestjs/common';
-import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
-import { PrismaHealthIndicator } from './prisma-health.indicator';
+import {
+  HealthCheck,
+  HealthCheckService,
+  TypeOrmHealthIndicator,
+} from '@nestjs/terminus';
 import { RedisHealthIndicator } from './redis-health.indicator';
 import { S3HealthIndicator } from './s3-health.indicator';
 import { SqsHealthIndicator } from './sqs-health.indicator';
@@ -12,7 +15,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
-    private readonly prismaIndicator: PrismaHealthIndicator,
+    private readonly dbIndicator: TypeOrmHealthIndicator,
     private readonly redisIndicator: RedisHealthIndicator,
     private readonly s3Indicator: S3HealthIndicator,
     private readonly sqsIndicator: SqsHealthIndicator,
@@ -34,7 +37,7 @@ export class HealthController {
   @ApiOperation({ summary: 'Readiness check' })
   getReady() {
     return this.health.check([
-      () => this.prismaIndicator.isHealthy('database'),
+      () => this.dbIndicator.pingCheck('database'),
       () => this.redisIndicator.isHealthy('redis'),
       () => this.s3Indicator.isHealthy('s3'),
       () => this.sqsIndicator.isHealthy('sqs'),

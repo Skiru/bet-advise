@@ -3,39 +3,27 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MatchEntity } from './entities/match.entity';
 import { Match } from '../domain/match.entity';
-import { MatchStatus } from '../domain/match-status.enum';
 import { generateUuidV7 } from '../../shared/domain/uuid';
 import { IMatchRepository } from '../application/ports/match-repository.port';
+import { MatchMapper } from './match.mapper';
 
 @Injectable()
 export class TypeOrmMatchRepository implements IMatchRepository {
   constructor(
     @InjectRepository(MatchEntity)
     private readonly repo: Repository<MatchEntity>,
+    private readonly mapper: MatchMapper,
   ) {}
-
-  private mapToDomain(entity: MatchEntity): Match {
-    return Match.create(
-      entity.id,
-      entity.homeTeam,
-      entity.awayTeam,
-      entity.kickoffAt,
-      entity.status as MatchStatus,
-      entity.createdAt,
-      entity.updatedAt,
-      entity.externalId,
-    );
-  }
 
   async findById(id: string): Promise<Match | null> {
     const entity = await this.repo.findOne({ where: { id } });
     if (!entity) return null;
-    return this.mapToDomain(entity);
+    return this.mapper.toDomain(entity);
   }
 
   async findAll(): Promise<Match[]> {
     const entities = await this.repo.find({ order: { kickoffAt: 'ASC' } });
-    return entities.map((entity) => this.mapToDomain(entity));
+    return entities.map((entity) => this.mapper.toDomain(entity));
   }
 
   async create(data: {
@@ -53,6 +41,6 @@ export class TypeOrmMatchRepository implements IMatchRepository {
       status: 'SCHEDULED',
     });
     const saved = await this.repo.save(entity);
-    return this.mapToDomain(saved);
+    return this.mapper.toDomain(saved);
   }
 }

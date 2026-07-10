@@ -40,8 +40,14 @@ describe('Controllers E2E Tests', () => {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       try {
-        await queryRunner.query('DELETE FROM "refresh_tokens" WHERE "external_id" = $1', ['ext-111']);
-        await queryRunner.query('DELETE FROM "api_tokens" WHERE "external_id" = $1', ['ext-111']);
+        await queryRunner.query(
+          'DELETE FROM "refresh_tokens" WHERE "external_id" = $1',
+          ['ext-111'],
+        );
+        await queryRunner.query(
+          'DELETE FROM "api_tokens" WHERE "external_id" = $1',
+          ['ext-111'],
+        );
         await queryRunner.commitTransaction();
       } catch {
         await queryRunner.rollbackTransaction();
@@ -123,7 +129,9 @@ describe('Controllers E2E Tests', () => {
         })
         .expect(200)
         .then((res) => {
-          expect(res.body.message).toBe('OneSignal subscription ID updated successfully.');
+          expect(res.body.message).toBe(
+            'OneSignal subscription ID updated successfully.',
+          );
         });
     });
 

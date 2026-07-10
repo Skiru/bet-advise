@@ -44,8 +44,12 @@ describe('GenerateAdviceHandler Integration', () => {
       await queryRunner.startTransaction();
       try {
         if (createdAdviceId) {
-          await queryRunner.manager.delete(OutboxEventEntity, { aggregateId: createdAdviceId });
-          await queryRunner.manager.delete(AdviceEntity, { id: createdAdviceId });
+          await queryRunner.manager.delete(OutboxEventEntity, {
+            aggregateId: createdAdviceId,
+          });
+          await queryRunner.manager.delete(AdviceEntity, {
+            id: createdAdviceId,
+          });
         }
         if (createdMatchId) {
           await queryRunner.manager.delete(MatchEntity, { id: createdMatchId });

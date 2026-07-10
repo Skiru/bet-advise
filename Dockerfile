@@ -9,9 +9,6 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 # Copy package config and lockfile
 COPY package.json pnpm-lock.yaml .npmrc .node-version ./
 
-# Copy Prisma schema
-COPY prisma ./prisma/
-
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
@@ -29,7 +26,6 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
 COPY package.json pnpm-lock.yaml .npmrc .node-version ./
-COPY prisma ./prisma/
 
 # Install only production dependencies
 RUN pnpm install --prod --frozen-lockfile
@@ -48,7 +44,6 @@ ENV NODE_ENV=production
 COPY --from=builder /app/dist ./dist
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=dependencies /app/package.json ./package.json
-COPY --from=dependencies /app/prisma ./prisma
 
 USER nodeapp
 

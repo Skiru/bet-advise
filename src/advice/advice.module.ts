@@ -12,6 +12,7 @@ import { AdviceGeneratedEventHandler } from './application/events/advice-generat
 import { AdviceController } from './interfaces/http/advice.controller';
 import { ADVICE_MODULE_API } from './interfaces/module-api/advice-module.api.interface';
 import { AdviceModuleApi } from './interfaces/module-api/advice-module.api';
+import { AdviceMapper } from './infrastructure/advice.mapper';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AdviceModuleApi } from './interfaces/module-api/advice-module.api';
   ],
   controllers: [AdviceController],
   providers: [
+    AdviceMapper,
     {
       provide: ADVICE_REPOSITORY_PORT,
       useClass: TypeOrmAdviceRepository,

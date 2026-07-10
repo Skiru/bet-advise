@@ -42,8 +42,12 @@ describe('Module APIs (e2e)', () => {
     matchesApi = moduleFixture.get<IMatchesModuleApi>(MATCHES_MODULE_API);
     adviceApi = moduleFixture.get<IAdviceModuleApi>(ADVICE_MODULE_API);
     auditApi = moduleFixture.get<IAuditModuleApi>(AUDIT_MODULE_API);
-    matchRepository = moduleFixture.get<IMatchRepository>(MATCH_REPOSITORY_PORT);
-    adviceRepository = moduleFixture.get<IAdviceRepository>(ADVICE_REPOSITORY_PORT);
+    matchRepository = moduleFixture.get<IMatchRepository>(
+      MATCH_REPOSITORY_PORT,
+    );
+    adviceRepository = moduleFixture.get<IAdviceRepository>(
+      ADVICE_REPOSITORY_PORT,
+    );
     dataSource = moduleFixture.get<DataSource>(DataSource);
   });
 
@@ -54,9 +58,13 @@ describe('Module APIs (e2e)', () => {
       await queryRunner.startTransaction();
       try {
         if (createdAdviceIds.length > 0) {
-          await queryRunner.manager.delete(OutboxEventEntity, { aggregateId: expect.any(String) });
+          await queryRunner.manager.delete(OutboxEventEntity, {
+            aggregateId: expect.any(String),
+          });
           for (const id of createdAdviceIds) {
-            await queryRunner.manager.delete(OutboxEventEntity, { aggregateId: id });
+            await queryRunner.manager.delete(OutboxEventEntity, {
+              aggregateId: id,
+            });
             await queryRunner.manager.delete(AdviceEntity, { id });
           }
         }
@@ -82,7 +90,9 @@ describe('Module APIs (e2e)', () => {
 
   describe('MatchesModuleApi', () => {
     it('should return null if match is not found', async () => {
-      const result = await matchesApi.findById('00000000-0000-0000-0000-000000000000');
+      const result = await matchesApi.findById(
+        '00000000-0000-0000-0000-000000000000',
+      );
       expect(result).toBeNull();
     });
 
@@ -106,7 +116,9 @@ describe('Module APIs (e2e)', () => {
 
   describe('AdviceModuleApi', () => {
     it('should return empty list if no advice exists for matchId', async () => {
-      const result = await adviceApi.getAdviceByMatchId('00000000-0000-0000-0000-000000000000');
+      const result = await adviceApi.getAdviceByMatchId(
+        '00000000-0000-0000-0000-000000000000',
+      );
       expect(result).toEqual([]);
     });
 
