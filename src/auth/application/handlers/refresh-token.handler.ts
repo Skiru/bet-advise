@@ -91,6 +91,7 @@ export class RefreshTokenHandler implements ICommandHandler<RefreshTokenCommand>
 
     const newRefreshTokenEntity = RefreshToken.create(
       newJti,
+      storedToken.tenantId,
       storedToken.externalId,
       storedToken.preferredBookmaker,
       storedToken.externalIntegrationId,

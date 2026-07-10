@@ -10,9 +10,18 @@ import {
 @Entity('outbox_events')
 @Index(['status', 'createdAt'])
 @Index(['aggregateType', 'aggregateId'])
+@Index(['tenantId'])
 export class OutboxEventEntity {
   @PrimaryColumn()
   id!: string;
+
+  @Column({
+    name: 'tenant_id',
+    type: 'varchar',
+    length: 50,
+    default: 'default',
+  })
+  tenantId!: string;
 
   @Column()
   type!: string;

@@ -72,6 +72,7 @@ describe('LogoutHandler', () => {
 
     const activeToken = RefreshToken.create(
       'jti-123',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',

@@ -51,6 +51,7 @@ describe('UpdateOneSignalSubIdHandler', () => {
   it('should successfully update OneSignal sub ID on active tokens and legacy API tokens', async () => {
     const activeToken1 = RefreshToken.create(
       'jti-1',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',
@@ -63,6 +64,7 @@ describe('UpdateOneSignalSubIdHandler', () => {
     );
     const activeToken2 = RefreshToken.create(
       'jti-2',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',
@@ -81,6 +83,7 @@ describe('UpdateOneSignalSubIdHandler', () => {
 
     const apiToken = ApiToken.create(
       'legacy-token',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',

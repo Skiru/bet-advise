@@ -11,9 +11,13 @@ import {
 @Index(['entityType', 'entityId'])
 @Index(['action'])
 @Index(['createdAt'])
+@Index(['tenantId'])
 export class AuditLogEntity {
   @PrimaryColumn()
   id!: string;
+
+  @Column({ name: 'tenant_id', type: 'varchar', length: 50, default: 'default' })
+  tenantId!: string;
 
   @Column({ type: 'varchar', nullable: true })
   actor!: string | null;

@@ -10,6 +10,7 @@ import { CachePortToken } from '../../../shared/application/cache/cache.port';
 import { AUDIT_MODULE_API } from '../../../audit/interfaces/module-api/audit-module.api.interface';
 import { Member } from '../../domain/member.entity';
 import { RefreshToken } from '../../domain/refresh-token.entity';
+import { TenantContext } from '../../../shared/infrastructure/tenant/tenant-context';
 import {
   UserNotFoundError,
   DeviceBindingError,
@@ -78,6 +79,12 @@ describe('LoginHandler', () => {
         { provide: HashServicePortToken, useValue: mockHashService },
         { provide: CachePortToken, useValue: mockCache },
         { provide: AUDIT_MODULE_API, useValue: mockAuditApi },
+        {
+          provide: TenantContext,
+          useValue: {
+            getTenantId: () => 'default',
+          },
+        },
       ],
     }).compile();
 
@@ -177,6 +184,7 @@ describe('LoginHandler', () => {
 
     const lastToken = RefreshToken.create(
       'jti-old',
+      'default',
       'ext-123',
       'Bet365',
       'm-123',

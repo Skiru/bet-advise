@@ -8,6 +8,7 @@ export class MatchMapper {
   toDomain(entity: MatchEntity): Match {
     return Match.create(
       entity.id,
+      entity.tenantId,
       entity.homeTeam,
       entity.awayTeam,
       entity.kickoffAt,
@@ -21,6 +22,7 @@ export class MatchMapper {
   toEntity(domain: Match): MatchEntity {
     const entity = new MatchEntity();
     entity.id = domain.id;
+    entity.tenantId = domain.tenantId;
     entity.homeTeam = domain.homeTeam;
     entity.awayTeam = domain.awayTeam;
     entity.kickoffAt = domain.kickoffAt;

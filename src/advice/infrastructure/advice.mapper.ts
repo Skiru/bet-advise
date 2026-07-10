@@ -8,6 +8,7 @@ export class AdviceMapper {
   toDomain(entity: AdviceEntity): Advice {
     return Advice.create(
       entity.id,
+      entity.tenantId,
       entity.matchId,
       entity.market,
       entity.selection,
@@ -22,6 +23,7 @@ export class AdviceMapper {
   toEntity(domain: Advice): AdviceEntity {
     const entity = new AdviceEntity();
     entity.id = domain.id;
+    entity.tenantId = domain.tenantId;
     entity.matchId = domain.matchId;
     entity.market = domain.market;
     entity.selection = domain.selection;

@@ -10,6 +10,7 @@ describe('Auth Domain Entities', () => {
 
       const tokenExpired = RefreshToken.create(
         'token-1',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -23,6 +24,7 @@ describe('Auth Domain Entities', () => {
 
       const tokenActive = RefreshToken.create(
         'token-2',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -47,6 +49,7 @@ describe('Auth Domain Entities', () => {
 
       const token = RefreshToken.create(
         'token-1',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -74,6 +77,7 @@ describe('Auth Domain Entities', () => {
 
       const token = RefreshToken.create(
         'token-1',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -99,6 +103,7 @@ describe('Auth Domain Entities', () => {
 
       const token = RefreshToken.create(
         'token-1',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -124,6 +129,7 @@ describe('Auth Domain Entities', () => {
 
       const tokenExpired = ApiToken.create(
         'token-1',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -134,6 +140,7 @@ describe('Auth Domain Entities', () => {
 
       const tokenActive = ApiToken.create(
         'token-2',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',
@@ -149,6 +156,7 @@ describe('Auth Domain Entities', () => {
     it('should update one signal sub id', () => {
       const token = ApiToken.create(
         'token-1',
+        'default',
         'ext-123',
         'Bet365',
         'external-integration-123',

@@ -16,6 +16,8 @@ import { HashServicePortToken } from './application/ports/hash-service.port';
 import { Sha256HashService } from './infrastructure/services/sha256-hash.service';
 import { CacheModule } from '../shared/infrastructure/cache/cache.module';
 import { AuditModule } from '../audit/audit.module';
+import { RefreshTokenMapper } from './infrastructure/refresh-token.mapper';
+import { ApiTokenMapper } from './infrastructure/api-token.mapper';
 
 // Handlers
 import { LoginHandler } from './application/handlers/login.handler';
@@ -32,6 +34,8 @@ import { UpdateOneSignalSubIdHandler } from './application/handlers/update-onesi
   ],
   controllers: [AuthController],
   providers: [
+    RefreshTokenMapper,
+    ApiTokenMapper,
     {
       provide: RefreshTokenRepositoryPortToken,
       useClass: TypeOrmRefreshTokenRepository,
@@ -64,6 +68,8 @@ import { UpdateOneSignalSubIdHandler } from './application/handlers/update-onesi
     ExternalIntegrationPointServicePortToken,
     TokenServicePortToken,
     HashServicePortToken,
+    RefreshTokenMapper,
+    ApiTokenMapper,
   ],
 })
 export class AuthModule {}

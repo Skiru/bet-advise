@@ -4,60 +4,44 @@ import { Repository } from 'typeorm';
 import { ApiTokenRepositoryPort } from '../../application/ports/api-token-repository.port';
 import { ApiTokenEntity } from '../entities/api-token.entity';
 import { ApiToken } from '../../domain/api-token.entity';
+import { ApiTokenMapper } from '../api-token.mapper';
+import { TenantContext } from '../../../shared/infrastructure/tenant/tenant-context';
 
 @Injectable()
 export class TypeOrmApiTokenRepository implements ApiTokenRepositoryPort {
   constructor(
     @InjectRepository(ApiTokenEntity)
     private readonly repo: Repository<ApiTokenEntity>,
+    private readonly mapper: ApiTokenMapper,
+    private readonly tenantContext: TenantContext,
   ) {}
 
-  private mapToDomain(entity: ApiTokenEntity): ApiToken {
-    return new ApiToken(
-      entity.token,
-      entity.externalId,
-      entity.preferredBookmaker,
-      entity.externalIntegrationId,
-      entity.activeBookmaker,
-      entity.deviceId,
-      entity.expiresAt,
-      entity.oneSignalSubscriptionId,
-      entity.deviceDetails,
-    );
-  }
-
-  private mapToEntity(domain: ApiToken): ApiTokenEntity {
-    const entity = new ApiTokenEntity();
-    entity.token = domain.token;
-    entity.externalId = domain.externalId;
-    entity.preferredBookmaker = domain.preferredBookmaker;
-    entity.externalIntegrationId = domain.externalIntegrationId;
-    entity.activeBookmaker = domain.activeBookmaker;
-    entity.deviceId = domain.deviceId;
-    entity.expiresAt = domain.expiresAt;
-    entity.oneSignalSubscriptionId = domain.oneSignalSubscriptionId;
-    entity.deviceDetails = domain.deviceDetails;
-    return entity;
-  }
-
   async save(token: ApiToken): Promise<void> {
-    const entity = this.mapToEntity(token);
+    const entity = this.mapper.toEntity(token);
+    entity.tenantId = this.tenantContext.getTenantId();
     await this.repo.save(entity);
   }
 
   async findByExternalId(externalId: string): Promise<ApiToken | null> {
-    const entity = await this.repo.findOne({ where: { externalId } });
+    const entity = await this.repo.findOne({
+      where: { externalId, tenantId: this.tenantContext.getTenantId() },
+    });
     if (!entity) return null;
-    return this.mapToDomain(entity);
+    return this.mapper.toDomain(entity);
   }
 
   async findByToken(token: string): Promise<ApiToken | null> {
-    const entity = await this.repo.findOne({ where: { token } });
+    const entity = await this.repo.findOne({
+      where: { token, tenantId: this.tenantContext.getTenantId() },
+    });
     if (!entity) return null;
-    return this.mapToDomain(entity);
+    return this.mapper.toDomain(entity);
   }
 
   async deleteByExternalId(externalId: string): Promise<void> {
-    await this.repo.delete({ externalId });
+    await this.repo.delete({
+      externalId,
+      tenantId: this.tenantContext.getTenantId(),
+    });
   }
 }

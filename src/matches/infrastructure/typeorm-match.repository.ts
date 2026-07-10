@@ -6,6 +6,7 @@ import { Match } from '../domain/match.entity';
 import { generateUuidV7 } from '../../shared/domain/uuid';
 import { IMatchRepository } from '../application/ports/match-repository.port';
 import { MatchMapper } from './match.mapper';
+import { TenantContext } from '../../shared/infrastructure/tenant/tenant-context';
 
 @Injectable()
 export class TypeOrmMatchRepository implements IMatchRepository {
@@ -13,16 +14,22 @@ export class TypeOrmMatchRepository implements IMatchRepository {
     @InjectRepository(MatchEntity)
     private readonly repo: Repository<MatchEntity>,
     private readonly mapper: MatchMapper,
+    private readonly tenantContext: TenantContext,
   ) {}
 
   async findById(id: string): Promise<Match | null> {
-    const entity = await this.repo.findOne({ where: { id } });
+    const entity = await this.repo.findOne({
+      where: { id, tenantId: this.tenantContext.getTenantId() },
+    });
     if (!entity) return null;
     return this.mapper.toDomain(entity);
   }
 
   async findAll(): Promise<Match[]> {
-    const entities = await this.repo.find({ order: { kickoffAt: 'ASC' } });
+    const entities = await this.repo.find({
+      where: { tenantId: this.tenantContext.getTenantId() },
+      order: { kickoffAt: 'ASC' },
+    });
     return entities.map((entity) => this.mapper.toDomain(entity));
   }
 
@@ -34,6 +41,7 @@ export class TypeOrmMatchRepository implements IMatchRepository {
   }): Promise<Match> {
     const entity = this.repo.create({
       id: generateUuidV7(),
+      tenantId: this.tenantContext.getTenantId(),
       homeTeam: data.homeTeam,
       awayTeam: data.awayTeam,
       kickoffAt: data.kickoffAt,

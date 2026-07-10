@@ -4,12 +4,22 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('matches')
 export class MatchEntity {
   @PrimaryColumn()
   id!: string;
+
+  @Column({
+    name: 'tenant_id',
+    type: 'varchar',
+    length: 50,
+    default: 'default',
+  })
+  @Index()
+  tenantId!: string;
 
   @Column({ type: 'varchar', nullable: true, unique: true })
   externalId!: string | null;

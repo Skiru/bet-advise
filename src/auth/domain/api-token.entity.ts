@@ -1,6 +1,7 @@
 export class ApiToken {
   constructor(
     public readonly token: string,
+    public readonly tenantId: string,
     public readonly externalId: string,
     public readonly preferredBookmaker: string,
     public readonly externalIntegrationId: string,
@@ -13,6 +14,7 @@ export class ApiToken {
 
   public static create(
     token: string,
+    tenantId: string,
     externalId: string,
     preferredBookmaker: string,
     externalIntegrationId: string,
@@ -24,6 +26,7 @@ export class ApiToken {
   ): ApiToken {
     return new ApiToken(
       token,
+      tenantId,
       externalId,
       preferredBookmaker,
       externalIntegrationId,

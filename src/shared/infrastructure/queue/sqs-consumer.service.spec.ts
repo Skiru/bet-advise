@@ -28,11 +28,22 @@ describe('SqsConsumerService', () => {
       log: jest.fn().mockResolvedValue({}),
     };
 
+    const mockTenantContext = {
+      run: (tenantId: string, callback: () => any) => callback(),
+      getTenantId: () => 'default',
+    };
+
+    const mockPublicIntegration = {
+      sendAdviceGenerated: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new SqsConsumerService(
       mockSqsClient,
       mockConfigService,
       mockPrisma,
       mockAudit,
+      mockTenantContext as any,
+      mockPublicIntegration as any,
     );
   });
 

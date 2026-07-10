@@ -15,6 +15,7 @@ describe('Advice Domain Entity', () => {
 
     const advice = new Advice(
       id,
+      'default',
       matchId,
       market,
       selection,
@@ -49,6 +50,7 @@ describe('Advice Domain Entity', () => {
 
     const advice = Advice.create(
       id,
+      'default',
       matchId,
       market,
       selection,

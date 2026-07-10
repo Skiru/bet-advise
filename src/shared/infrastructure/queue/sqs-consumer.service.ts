@@ -17,6 +17,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProcessedMessageEntity } from './entities/processed-message.entity';
 import { AuditLogService } from '../../../audit/application/audit-log.service';
+import { TenantContext } from '../tenant/tenant-context';
+import { PublicIntegrationService } from '../integration/public-integration.service';
 
 @Injectable()
 export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
@@ -35,6 +37,8 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(ProcessedMessageEntity)
     private readonly processedRepo: Repository<ProcessedMessageEntity>,
     private readonly auditLogService: AuditLogService,
+    private readonly tenantContext: TenantContext,
+    private readonly publicIntegrationService: PublicIntegrationService,
   ) {
     this.queueUrl = this.configService.get<string>('sqs.queueUrl') || '';
     this.waitTimeSeconds =
@@ -92,71 +96,90 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processMessageWithRetry(message: any): Promise<void> {
-    try {
-      const body = JSON.parse(message.Body || '{}');
-      const eventId = body.eventId || message.MessageId;
-      const eventType = body.type;
+    const body = JSON.parse(message.Body || '{}');
+    const eventId = body.eventId || message.MessageId;
+    const eventType = body.type;
+    const handlerName = 'SqsConsumerService';
 
-      if (!eventType) {
+    if (!eventType) {
+      this.logger.warn(
+        `Message is missing 'type'. Deleting message. Content: ${message.Body}`,
+      );
+      await this.deleteMessage(message.ReceiptHandle);
+      return;
+    }
+
+    this.logger.log(`Processing message ${eventId} of type ${eventType}`);
+
+    let reserved = false;
+    try {
+      // 1. Inbox Pattern: Attempt atomic reservation using DB primary key constraint
+      try {
+        await this.processedRepo.save(
+          this.processedRepo.create({
+            eventId,
+            handlerName,
+          }),
+        );
+        reserved = true;
+      } catch (dbError: any) {
+        // Code 23505 is standard PG unique violation. Or we just catch any insert failure as duplicate
         this.logger.warn(
-          `Message is missing 'type'. Deleting message. Content: ${message.Body}`,
+          `Message ${eventId} already processed/reserved by ${handlerName}. Skipping and deleting.`,
         );
         await this.deleteMessage(message.ReceiptHandle);
         return;
       }
 
-      this.logger.log(`Processing message ${eventId} of type ${eventType}`);
+      // 2. Process message contents within the original tenant context
+      const tenantId = body.tenantId || 'default';
+      await this.tenantContext.run(tenantId, async () => {
+        if (eventType === 'ADVICE_GENERATED') {
+          const payload = body.payload || {};
+          const adviceId = payload.adviceId;
 
-      const handlerName = 'SqsConsumerService';
+          // Log audit event within tenant context
+          await this.auditLogService.log(
+            'ADVICE_MESSAGE_PROCESSED',
+            'Advice',
+            adviceId || 'unknown',
+            'system',
+            { eventId, payload },
+          );
 
-      // 1. Check Idempotency (Duplicate Prevention)
-      const alreadyProcessed = await this.processedRepo.findOne({
-        where: {
-          eventId,
-          handlerName,
-        },
+          // Dispatch integration webhook call
+          await this.publicIntegrationService.sendAdviceGenerated({
+            adviceId,
+            tenantId,
+            matchId: payload.matchId,
+            market: payload.market,
+            selection: payload.selection,
+            confidence: payload.confidence,
+          });
+
+          this.logger.log(
+            `Successfully processed ADVICE_GENERATED event: ${eventId} for Advice ID: ${adviceId} (Tenant: ${tenantId})`,
+          );
+        } else {
+          this.logger.warn(`Unknown message type: ${eventType}. Ignoring.`);
+        }
       });
 
-      if (alreadyProcessed) {
-        this.logger.warn(
-          `Message ${eventId} already processed by ${handlerName}. Skipping and deleting.`,
-        );
-        await this.deleteMessage(message.ReceiptHandle);
-        return;
-      }
-
-      // 2. Process message contents
-      if (eventType === 'ADVICE_GENERATED') {
-        const payload = body.payload || {};
-        const adviceId = payload.adviceId;
-
-        // Log audit event as requested
-        await this.auditLogService.log(
-          'ADVICE_MESSAGE_PROCESSED',
-          'Advice',
-          adviceId || 'unknown',
-          'system',
-          { eventId, payload },
-        );
-
-        this.logger.log(
-          `Successfully processed ADVICE_GENERATED event: ${eventId} for Advice ID: ${adviceId}`,
-        );
-      } else {
-        this.logger.warn(`Unknown message type: ${eventType}. Ignoring.`);
-      }
-
-      // 3. Mark as processed & Delete SQS message
-      await this.processedRepo.save(
-        this.processedRepo.create({
-          eventId,
-          handlerName,
-        }),
-      );
-
+      // 3. Delete from SQS only after successful commit/processing
       await this.deleteMessage(message.ReceiptHandle);
     } catch (error) {
       this.logger.error(`Failed to process SQS message:`, error);
+      // Rollback reservation so the message can be safely retried by SQS visibility logic
+      if (reserved) {
+        try {
+          await this.processedRepo.delete({ eventId, handlerName });
+        } catch (delError) {
+          this.logger.error(
+            `Failed to rollback reservation for message ${eventId}:`,
+            delError,
+          );
+        }
+      }
     }
   }
 

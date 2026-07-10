@@ -108,6 +108,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     try {
       const messageBody = {
         eventId: event.id,
+        tenantId: event.tenantId,
         type: event.type,
         aggregateType: event.aggregateType,
         aggregateId: event.aggregateId,
@@ -120,6 +121,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         eventType: event.type,
         aggregateType: event.aggregateType,
         aggregateId: event.aggregateId,
+        tenantId: event.tenantId,
       };
 
       await this.messageQueue.publish(this.queueUrl, messageBody, attributes);

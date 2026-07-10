@@ -12,6 +12,15 @@ export class ApiTokenEntity {
   @PrimaryColumn({ type: 'varchar', length: 64 })
   token!: string;
 
+  @Column({
+    name: 'tenant_id',
+    type: 'varchar',
+    length: 50,
+    default: 'default',
+  })
+  @Index()
+  tenantId!: string;
+
   @Index()
   @Column({ name: 'external_id' })
   externalId!: string;

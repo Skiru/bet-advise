@@ -18,6 +18,7 @@ import { AUDIT_MODULE_API } from '../../../audit/interfaces/module-api/audit-mod
 import type { IAuditModuleApi } from '../../../audit/interfaces/module-api/audit-module.api.interface';
 import { RefreshToken } from '../../domain/refresh-token.entity';
 import { ApiToken } from '../../domain/api-token.entity';
+import { TenantContext } from '../../../shared/infrastructure/tenant/tenant-context';
 import {
   ACCESS_TOKEN_TTL_MS,
   REFRESH_TOKEN_TTL_MS,
@@ -45,6 +46,7 @@ export class LoginHandler implements ICommandHandler<LoginCommand> {
     private readonly cache: CachePort,
     @Inject(AUDIT_MODULE_API)
     private readonly auditApi: IAuditModuleApi,
+    private readonly tenantContext: TenantContext,
   ) {}
 
   async execute(command: LoginCommand) {
@@ -88,6 +90,7 @@ export class LoginHandler implements ICommandHandler<LoginCommand> {
 
     const refreshTokenEntity = RefreshToken.create(
       jti,
+      this.tenantContext.getTenantId(),
       member.externalId,
       member.preferredBookmaker,
       member.id,
@@ -130,6 +133,7 @@ export class LoginHandler implements ICommandHandler<LoginCommand> {
     const legacyTokenStr = this.hashService.generateRandomToken();
     const apiTokenEntity = ApiToken.create(
       legacyTokenStr,
+      this.tenantContext.getTenantId(),
       member.externalId,
       member.preferredBookmaker,
       member.id,

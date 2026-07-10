@@ -3,6 +3,7 @@ import { AdviceStatus } from './advice-status.enum';
 export class Advice {
   constructor(
     public readonly id: string,
+    public readonly tenantId: string,
     public readonly matchId: string,
     public readonly market: string,
     public readonly selection: string,
@@ -15,6 +16,7 @@ export class Advice {
 
   public static create(
     id: string,
+    tenantId: string,
     matchId: string,
     market: string,
     selection: string,
@@ -26,6 +28,7 @@ export class Advice {
   ): Advice {
     return new Advice(
       id,
+      tenantId,
       matchId,
       market,
       selection,

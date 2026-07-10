@@ -67,6 +67,7 @@ describe('RefreshTokenHandler', () => {
   it('should successfully rotate tokens when valid', async () => {
     const activeToken = RefreshToken.create(
       'jti-123',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',
@@ -102,6 +103,7 @@ describe('RefreshTokenHandler', () => {
   it('should throw TokenExpiredError if token is expired', async () => {
     const expiredToken = RefreshToken.create(
       'jti-123',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',
@@ -122,6 +124,7 @@ describe('RefreshTokenHandler', () => {
   it('should throw TokenRevokedError if token was revoked', async () => {
     const revokedToken = RefreshToken.create(
       'jti-123',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',
@@ -143,6 +146,7 @@ describe('RefreshTokenHandler', () => {
   it('should throw DeviceBindingError if device does not match', async () => {
     const activeToken = RefreshToken.create(
       'jti-123',
+      'default',
       'ext-123',
       'Bet365',
       'ex-123',

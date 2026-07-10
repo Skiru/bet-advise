@@ -14,6 +14,7 @@ describe('Match Domain Entity', () => {
 
     const match = new Match(
       id,
+      'default',
       homeTeam,
       awayTeam,
       kickoffAt,
@@ -44,6 +45,7 @@ describe('Match Domain Entity', () => {
 
     const match = Match.create(
       id,
+      'default',
       homeTeam,
       awayTeam,
       kickoffAt,

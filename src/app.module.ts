@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import appConfig from './shared/infrastructure/config/app.config';
 import databaseConfig from './shared/infrastructure/config/database.config';
@@ -14,6 +14,8 @@ import { StorageModule } from './shared/infrastructure/storage/storage.module';
 import { QueueModule } from './shared/infrastructure/queue/queue.module';
 import { CacheModule } from './shared/infrastructure/cache/cache.module';
 import { DatabaseModule } from './shared/infrastructure/database/database.module';
+import { TenantModule } from './shared/infrastructure/tenant/tenant.module';
+import { TenantMiddleware } from './shared/infrastructure/tenant/tenant.middleware';
 import { HealthModule } from './shared/infrastructure/health/health.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { AuditModule } from './audit/audit.module';
@@ -47,6 +49,7 @@ import { AppService } from './app.service';
     QueueModule,
     CacheModule,
     DatabaseModule,
+    TenantModule,
     HealthModule,
     OutboxModule,
     AuditModule,
@@ -57,4 +60,8 @@ import { AppService } from './app.service';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).forRoutes('*');
+  }
+}

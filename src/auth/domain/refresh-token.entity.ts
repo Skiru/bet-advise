@@ -1,6 +1,7 @@
 export class RefreshToken {
   constructor(
     public readonly id: string,
+    public readonly tenantId: string,
     public readonly externalId: string,
     public readonly preferredBookmaker: string,
     public readonly externalIntegrationId: string,
@@ -21,6 +22,7 @@ export class RefreshToken {
 
   public static create(
     id: string,
+    tenantId: string,
     externalId: string,
     preferredBookmaker: string,
     externalIntegrationId: string,
@@ -37,6 +39,7 @@ export class RefreshToken {
   ): RefreshToken {
     return new RefreshToken(
       id,
+      tenantId,
       externalId,
       preferredBookmaker,
       externalIntegrationId,
