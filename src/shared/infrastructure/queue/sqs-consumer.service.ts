@@ -30,6 +30,7 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
 
   private running = false;
   private pollPromise: Promise<void> | null = null;
+  private cleanupIntervalId: NodeJS.Timeout | null = null;
 
   constructor(
     @Inject(SQS_CLIENT) private readonly sqsClient: SQSClient,
@@ -54,6 +55,18 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Starting SQS consumer polling loop...');
       this.running = true;
       this.pollPromise = this.pollLoop();
+
+      // Start periodic 24-hour cleanup of processed messages older than 7 days
+      this.cleanupIntervalId = setInterval(() => {
+        this.pruneOldProcessedMessages().catch((err) => {
+          this.logger.error('Failed to prune old processed messages:', err);
+        });
+      }, 24 * 60 * 60 * 1000);
+
+      // Trigger one prune cycle on boot asynchronously
+      this.pruneOldProcessedMessages().catch((err) => {
+        this.logger.error('Failed to trigger initial message pruning:', err);
+      });
     } else {
       this.logger.warn('SQS consumer is disabled or queue URL is missing.');
     }
@@ -62,10 +75,36 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     this.logger.log('Stopping SQS consumer...');
     this.running = false;
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+    }
     if (this.pollPromise) {
       await this.pollPromise;
     }
     this.logger.log('SQS consumer stopped.');
+  }
+
+  private async pruneOldProcessedMessages(): Promise<void> {
+    try {
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+      const result = await this.processedRepo
+        .createQueryBuilder()
+        .delete()
+        .from(ProcessedMessageEntity)
+        .where('processedAt < :cutoff', { cutoff })
+        .execute();
+      if (result.affected && result.affected > 0) {
+        this.logger.log(
+          `Pruned old processed message records. Deleted rows count: ${result.affected}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to prune old processed message entries:',
+        error,
+      );
+    }
   }
 
   private async pollLoop(): Promise<void> {
@@ -132,7 +171,16 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
       }
 
       // 2. Process message contents within the original tenant context
-      const tenantId = body.tenantId || 'default';
+      let tenantId = body.tenantId || 'default';
+      // Sanitize the tenant identifier consistently across all entry points
+      tenantId = tenantId
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '');
+      if (!tenantId) {
+        tenantId = 'default';
+      }
+
       await this.tenantContext.run(tenantId, async () => {
         if (eventType === 'ADVICE_GENERATED') {
           const payload = body.payload || {};

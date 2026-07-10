@@ -1,11 +1,15 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { TenantContext } from './tenant-context';
+import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
-  constructor(private readonly tenantContext: TenantContext) {}
+  constructor(
+    private readonly tenantContext: TenantContext,
+    private readonly configService: ConfigService,
+  ) {}
 
   use(req: Request, res: Response, next: NextFunction) {
     // 1. Read default or x-tenant-id header
@@ -20,12 +24,15 @@ export class TenantMiddleware implements NestMiddleware {
         ? authHeader.substring(7)
         : authHeader;
       try {
-        const decoded = jwt.decode(token) as { tenant_id?: string } | null;
-        if (decoded && decoded.tenant_id) {
-          tenantId = decoded.tenant_id;
+        const secret =
+          this.configService.get<string>('jwt.secret') || 'super-secret';
+        const verified = jwt.verify(token, secret) as { tenant_id?: string };
+        if (verified && verified.tenant_id) {
+          tenantId = verified.tenant_id;
         }
       } catch {
-        // Safe to ignore; JwtAuthGuard will handle signature verification
+        // Signature verification failed (forged, malformed, or expired token).
+        // We DO NOT trust the token's claims, sealing BOLA/IDOR vulnerabilities!
       }
     }
 
