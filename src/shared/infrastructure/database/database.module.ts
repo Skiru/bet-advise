@@ -6,6 +6,8 @@ import { AdviceEntity } from '../../../advice/infrastructure/entities/advice.ent
 import { AuditLogEntity } from '../../../audit/infrastructure/entities/audit-log.entity';
 import { OutboxEventEntity } from '../../../outbox/infrastructure/entities/outbox-event.entity';
 import { ProcessedMessageEntity } from '../queue/entities/processed-message.entity';
+import { RefreshTokenEntity } from '../../../auth/infrastructure/entities/refresh-token.entity';
+import { ApiTokenEntity } from '../../../auth/infrastructure/entities/api-token.entity';
 
 @Global()
 @Module({
@@ -28,6 +30,8 @@ import { ProcessedMessageEntity } from '../queue/entities/processed-message.enti
             AuditLogEntity,
             OutboxEventEntity,
             ProcessedMessageEntity,
+            RefreshTokenEntity,
+            ApiTokenEntity,
           ],
           synchronize: isLocal, // Auto schema synchronization only locally on MiniStack
           logging: isLocal ? ['query', 'error'] : ['error'],
@@ -42,6 +46,8 @@ import { ProcessedMessageEntity } from '../queue/entities/processed-message.enti
       AuditLogEntity,
       OutboxEventEntity,
       ProcessedMessageEntity,
+      RefreshTokenEntity,
+      ApiTokenEntity,
     ]),
   ],
   exports: [TypeOrmModule],

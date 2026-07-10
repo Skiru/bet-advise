@@ -1,127 +1,375 @@
-# Bet Advise — NestJS AWS/MiniStack Hardened Backend (TypeORM)
+# Bet Advise — NestJS AWS/MiniStack Hardened Backend (Modular Monolith & CQRS)
 
-Produkcyjnej klasy backend (Hardened Baseline) oparty o architekturę **Modular Monolith** przy użyciu **NestJS 11**, **PostgreSQL (TypeORM)**, **ElastiCache Redis**, **Amazon SQS** oraz **Amazon S3**. Lokalne środowisko emulowane jest przy użyciu **MiniStack**.
+Welcome to the definitive architectural manual for **Bet Advise**, a production-ready, highly secure (hardened baseline) NestJS backend built upon the principles of a **Modular Monolith**, **Hexagonal Architecture (Ports and Adapters)**, **CQRS (Command Query Responsibility Segregation)**, **Transactional Outbox**, and **Zero-Trust Infrastructure**.
 
-Ustrukturyzowany pod kątem defensywnego programowania, wysokiej odporności na błędy (Zero-Trust) oraz pełnej zgodności z najlepszymi praktykami AWS i NestJS.
-
----
-
-## 1. Technologiczny Stack
-- **Framework:** NestJS 11 (strict TypeScript configuration)
-- **Baza Danych:** Aurora PostgreSQL 16 (lokalnie MiniStack RDS-compatible na porcie 15432)
-- **ORM:** TypeORM v0.3 (Data Mapper Pattern)
-- **Cache:** Amazon ElastiCache Redis (lokalnie MiniStack ElastiCache-compatible na porcie 16379)
-- **Kolejki (Message Queue):** Amazon SQS z DLQ (lokalnie MiniStack SQS na porcie 4566)
-- **Storage:** Amazon S3 z Block Public Access (lokalnie MiniStack S3 na porcie 4566)
-- **Uruchomienie Lokalne:** Docker Compose, Corepack, pnpm@11.9.0, fnm (Node 24)
+This system is engineered for exceptional fault tolerance, extreme defensive programming, clean business-logic encapsulation, and seamless integration with AWS services (S3, SQS, RDS PostgreSQL, ElastiCache Redis) emulated locally via the **MiniStack** ecosystem.
 
 ---
 
-## 2. Architektura Systemu (Overview)
+## 1. Architectural Philosophy & Core Patterns
 
-Projekt wdraża **Modular Monolith** ze wzorcem **CQRS (Command Query Responsibility Segregation)** oraz **Transactional Outbox Pattern**:
+The application is structured to ensure that business logic remains completely isolated from technical implementation details (frameworks, database drivers, and cloud services). 
 
-1. **Clean Domain Model:** Wszystkie encje domenowe (`Match`, `Advice`) w folderach `domain/` są w 100% czystymi klasami TypeScript pozbawionymi jakichkolwiek dekoratorów ORM.
-2. **TypeORM Data Mappers:** Repozytoria (`TypeOrmMatchRepository`, `TypeOrmAdviceRepository`) pełnią rolę Data Mapperów — odpowiadają za mapowanie fizycznych encji bazodanowych (dekorowanych dekoratorami TypeORM) na czyste obiekty domenowe.
-3. **Transactional Outbox:** Wygenerowanie rekomendacji (Advice) zapisuje rekord `AdviceEntity` oraz zdarzenie outbox `OutboxEventEntity` w obrębie **jednej transakcji bazodanowej** (`QueryRunner` transaction).
-4. **Outbox Relay (`OutboxRelayService`):** Lekki, cykliczny deweloperski demon, który pobiera zdarzenia o statusie `PENDING`, bezpiecznie publikuje je na Amazon SQS i w przypadku sukcesu markuje je jako `PUBLISHED`. W razie niepowodzenia inkrementuje licznik prób i przechodzi w stan `FAILED` po osiągnięciu limitu.
-5. **Idempotentny SQS Consumer (`SqsConsumerService`):** Pobiera zdarzenia z kolejki SQS za pomocą długiego odpytywania (Long Polling) i dba o duplikaty przy użyciu tabeli `ProcessedMessageEntity` (unikalny klucz złożony `eventId` + `handlerName`), gwarantując semantykę *exactly-once processing*.
-6. **Zasada Zero-Trust dla AWS:** Brak zahardkodowanych haseł i kluczy AWS. W produkcji aplikacja automatycznie rozwiązuje tożsamość poprzez domyślny łańcuch dostawców (IAM Roles / Default Credential Provider Chain).
+```
+                                      +------------------------------------+
+                                      |         INTERFACES LAYER           |
+                                      |   Controllers, Guards, DTOs        |
+                                      +-----------------+------------------+
+                                                        |
+                                                        v
+                                      +-----------------+------------------+
+                                      |        APPLICATION LAYER           |
+                                      |   Command/Query Handlers, Ports    |
+                                      +-----------------+------------------+
+                                                        |
+                                                        v
+                                      +-----------------+------------------+
+                                      |           DOMAIN LAYER             |
+                                      |   Pure Entities, Enums, Errors     |
+                                      +-----------------+------------------+
+                                                        ^
+                                                        | (Implements Ports)
+                                      +-----------------+------------------+
+                                      |       INFRASTRUCTURE LAYER         |
+                                      |   TypeORM, Redis, AWS SDK, SQS     |
+                                      +------------------------------------+
+```
+
+### 1.1 Hexagonal Architecture (Ports & Adapters)
+To avoid vendor lock-in and keep domain code testable, the system defines interfaces (**Ports**) inside the Application Layer, while concrete implementations (**Adapters**) are kept in the Infrastructure Layer.
+*   **Port Examples:** `TokenServicePort` (token issuance), `CachePort` (cache operations), `MessageQueuePort` (message publishing).
+*   **Adapter Examples:** `JwtTokenService` (JSON Web Tokens), `RedisCacheAdapter` (Redis client), `SqsMessageQueueAdapter` (AWS SQS SDK Client).
+This allows swapping Redis with Memcached or SQS with RabbitMQ without changing a single line of business logic in the Command/Query handlers.
+
+### 1.2 Clean Domain Model & Data Mapper Pattern
+Most ORM-based backends suffer from "Anemic Domain Models" decorated with ORM decorators (like `@Entity` or `@Column`), causing domain rules to leak into database schema details. This application prevents this by strictly decoupling domain modeling from database persistence:
+1.  **Pure Domain Entities:** All entities inside the domain folders (e.g., `Match` and `Advice`) are **100% pure TypeScript classes** with zero decorators, imports, or external dependencies. They contain raw constructors, static creation helpers, and business state logic.
+2.  **Infrastructure Data Entities:** Separate database schema representations (e.g., `MatchEntity`, `AdviceEntity`) are declared inside `infrastructure/entities/`, fully decorated with TypeORM metadata.
+3.  **Data Mappers (Repositories):** The repositories (`TypeOrmMatchRepository`, `TypeOrmAdviceRepository`) act as translators. They fetch the decorated data entities, translate them into pure domain entities, and conversely map pure domain entities back into data entities for persistence.
+
+### 1.3 Command Query Responsibility Segregation (CQRS)
+Separating state mutation from data queries allows for fine-tuned scalability, clear execution paths, and simplified security audits. Powered by `@nestjs/cqrs`:
+*   **Commands (Write Path):** Model actions that alter state (e.g., `CreateMatchCommand`, `GenerateAdviceCommand`, `LoginUsingOtpCommand`). They are executed by dedicated, atomic Command Handlers (`CreateMatchHandler`, `GenerateAdviceHandler`, etc.). Handlers encapsulate validation, invoke repository writers, write transaction logs, and dispatch local domain events.
+*   **Queries (Read Path):** Model read-only actions (e.g., `ListMatchesQuery`, `GetMatchQuery`, `ListAdviceQuery`, `GetAdviceQuery`). They bypass complex domain write-invariants and fetch read-optimized data quickly.
+*   **Local Event Bus:** Local domain events (e.g., `AdviceGeneratedEvent`) are dispatched asynchronously using NestJS's in-memory `EventBus` for immediate internal decoupling.
 
 ---
 
-## 3. MiniStack — Lokalne Środowisko AWS
+## 2. Directory Layout & Module Decoupling
 
-**MiniStack** jest super-szybkim, zoptymalizowanym emulatorem chmurowym AWS napisanym pod lokalny development (zastępuje ciężkie emulatory i oddzielne kontenery). 
+The project is structured as a highly decoupled **Modular Monolith**. Each directory encapsulates a single bounded context containing its own Domain, Application, Interfaces, and Infrastructure sub-layers.
 
-### Zalety i powody użycia:
-- Jeden port (`4566`) na wszystkie emulowane serwisy AWS (S3, SQS).
-- Izolowane i trwałe bazy PostgreSQL (port `15432`) oraz Redis (port `16379`) powiązane z siecią Docker MiniStack.
-- Pełna zgodność z API AWS SDK v3.
+```
+src/
+├── app.module.ts                       # Application Root Module bootstrapping configuration
+├── app.controller.ts                   # Gateway controller for index-level health/greetings
+├── app.service.ts                      # Simple root greeting service
+│
+├── matches/                            # Bounded Context: Sports Matches
+│   ├── domain/                         # Pure domain logic (Match entity, MatchStatus enum)
+│   ├── application/                    # Application layer (Commands, Queries, Handlers)
+│   ├── interfaces/                     # HTTP Entrypoints (MatchesController, DTOs)
+│   └── infrastructure/                 # DB Layer (MatchEntity, TypeOrmMatchRepository)
+│
+├── advice/                             # Bounded Context: Betting Recommendation Engine
+│   ├── domain/                         # Pure domain logic (Advice entity, AdviceStatus enum, Events)
+│   ├── application/                    # Application Layer (Commands, Queries, Event Handlers)
+│   ├── interfaces/                     # HTTP Entrypoints (AdviceController, DTOs)
+│   └── infrastructure/                 # DB & Transaction Layer (AdviceEntity, TypeOrmAdviceRepository)
+│
+├── auth/                               # Bounded Context: Member Security, OTP, and JWT Session Manager
+│   ├── domain/                         # Security Entities (Member, RefreshToken, ApiToken, Errors)
+│   ├── application/                    # Ports & CQRS Command Handlers
+│   ├── interfaces/                     # Controllers, Guards (JwtAuthGuard, MemberOwnershipGuard), Decorators
+│   └── infrastructure/                 # Services (JwtToken, Hash), Repositories (TypeORM refresh/api tokens)
+│
+├── outbox/                             # Technical Module: Transactional Outbox Pattern
+│   ├── infrastructure/                 # DB Layer (OutboxEventEntity)
+│   └── application/                    # Relay Loop Demon (OutboxRelayService polling PENDING events)
+│
+├── audit/                              # Technical Module: Hardened Audit Logs
+│   ├── infrastructure/                 # DB Layer (AuditLogEntity, TypeOrmAuditLogRepository)
+│   └── application/                    # Service orchestrating security and log writes
+│
+└── shared/                             # Core cross-cutting infrastructure & shared components
+    ├── domain/                         # Shared exceptions (DomainError, NotFoundDomainError)
+    ├── application/                    # General Ports (CachePort, MessageQueuePort, ObjectStoragePort)
+    ├── interfaces/                     # Global Filters (GlobalExceptionFilter), Interceptors (Correlation ID)
+    └── infrastructure/                 # Shared Adapters (AWS Clients, TypeORM DB, Redis Cache, Health, S3, SQS)
+```
 
 ---
 
-## 4. Wymagania Wstępne (Prerequisites)
-Przed uruchomieniem upewnij się, że masz zainstalowane:
-- **Docker** oraz **Docker Desktop**
-- **fnm** (Fast Node Manager)
-- **Corepack** (do aktywacji pnpm)
+## 3. High-Fidelity Module Communication
+
+In a true Modular Monolith, modules are designed to maintain strict boundaries. Communication occurs via three highly deliberate mechanisms:
+
+```
+[Module A (Matches)] --- (1) Inject Repository (Read-Only/Cross-Query) ---> [Module B (Advice)]
+                     --- (2) Local CQRS Event Bus (Async In-Memory)  ---> [Module B (Advice)]
+                     --- (3) Transactional Outbox -> SQS Queue       ---> [Background Services/Audit]
+```
+
+### 3.1 Synchronous Service/Repository Injection (Module APIs)
+To guarantee strict type safety and absolute performance, read operations or cross-module validations use direct class injection. For example, `GenerateAdviceHandler` (in `advice`) directly injects `TypeOrmMatchRepository` (from `matches`) to verify that the target `matchId` exists and is in a valid state before creating any advice.
+*   **Constraint:** Modules never write directly to tables owned by other modules. State modification must always route through the respective module's Command Bus.
+
+### 3.2 Asynchronous Local Event Bus (In-Memory decoupled execution)
+When a state mutation completes, a local event is dispatched onto the NestJS `EventBus`.
+*   **Example:** When advice is generated, `GenerateAdviceHandler` publishes `new AdviceGeneratedEvent(id, matchId)`.
+*   **Subscriber:** `AdviceGeneratedEventHandler` is an application-level listener that reacts asynchronously. This pattern ensures that primary command handlers remain small and are not bloated with secondary responsibilities (e.g., refreshing local cache matrices).
+
+### 3.3 Transactional Outbox & Amazon SQS (Reliable distributed messaging)
+For critical business-to-system operations, the monolit uses the **Transactional Outbox Pattern** to guarantee reliable async message delivery without risk of dual-write failures (where DB transaction commits but SQS network publish fails).
+
+```
+1. Client Sends Command -> 2. Start Database Transaction
+                              ├── Write AdviceEntity
+                              └── Write OutboxEventEntity (PENDING)
+                           3. Commit Database Transaction (Atomic Success)
+                               |
+                               v
+                       [Database Table: outbox_events]
+                               |
+                               +--- Polled by OutboxRelayService ---+
+                                                                    v
+                                                     4. Send to Amazon SQS Queue
+                                                                    |
+                                                     5. On Success: Mark as PUBLISHED
+                                                        On Failure: Retry or mark FAILED
+```
+
+#### The Outbox Relay Loop (`OutboxRelayService`):
+1.  Runs on a highly optimized, safe background interval loop (default: `5000ms`).
+2.  Queries the `outbox_events` table for up to a defined batch size (default: `10`) of events with a status of `PENDING`, ordered chronologically (`ASC`).
+3.  Protects itself from overlapping execution using a stateful class-level `processing` lock flag.
+4.  Wraps each event into a standardized integration message with core metadata (e.g., `eventId`, `timestamp`, `schemaVersion`) and target-specific SQS string attributes.
+5.  Publishes the message to SQS via the `MessageQueuePort`.
+6.  **Upon Success:** Updates the database record to `PUBLISHED` and sets `publishedAt` to the current timestamp.
+7.  **Upon Failure:** Increments the event's `attemptCount` and records the error stack in `lastError`. If the `attemptCount` hits `maxAttempts` (default: `5`), the event status transitions to `FAILED` for manual operations attention.
 
 ---
 
-## 5. Jak Uruchomić Lokalnie (Quick Start)
+## 4. Idempotent SQS Message Polling
 
-Wykonaj poniższe kroki w terminalu (zalecany `fish` shell):
+The system processes incoming events from Amazon SQS via a background polling demon, `SqsConsumerService`, that enforces **exactly-once processing** through a robust idempotency engine.
+
+```
+            Receive Message from Amazon SQS
+                           |
+                           v
+              Parse eventId & eventType
+                           |
+                           v
+        Does eventId + 'SqsConsumerService' exist 
+        in Database Table: processed_messages?
+                     /           \
+                  YES             NO
+                  /                 \
+        [Duplicate Message]      Execute handler logic (e.g., Log Audit)
+                 |                   |
+                 |               Insert (eventId, 'SqsConsumerService')
+                 |               into database table: processed_messages
+                 \                  /
+                  \                /
+             Delete message from SQS Queue
+```
+
+### 4.1 Detailed Polling & Processing Sequence:
+1.  **Long Polling:** The consumer connects to the SQS queue using long polling (`WaitTimeSeconds` default: `20`) to minimize API requests and ensure real-time message retrieval.
+2.  **Signature Extraction:** For each message, it extracts the unique identifier (`eventId`) and the `type` from the JSON body.
+3.  **Idempotency Key Check:** It performs a select query on the `processed_messages` table matching the composite key: `eventId` + `handlerName` (where `handlerName` is `'SqsConsumerService'`).
+4.  **Bypass Duplicate (Skip):** If a matching record is found, the system immediately recognizes the message as a duplicate (due to an SQS network retry or visible timeout overlap). It logs a warning, deletes the duplicate from SQS to clean the queue, and returns.
+5.  **Execution (At-Least-Once Boundary):** If the message is fresh, the consumer processes the payload. For example, on `ADVICE_GENERATED`, it writes an audit log with event tracking metadata.
+6.  **Persist Idempotency State:** Upon successful execution, it inserts a new `ProcessedMessageEntity` into the database.
+7.  **SQS Delete:** It deletes the message from the SQS queue using the unique `ReceiptHandle` to prevent any other consumer thread from picking it up.
+
+---
+
+## 5. Zero-Trust Hardened Authentication & Authorization
+
+The system implements a secure, custom, session-revocable auth architecture based on upstream **ExternalIntegrationPoint** (identity provider) member metrics and fine-grained resource scope checking.
+
+### 5.1 The Two-Factor OTP Login Cycle
+1.  **Request Passcode:** The user submits a mobile number. The server strips spacing, verifies their existence in the External Integration Point, and if valid, generates a random OTP passcode.
+2.  **Transient Storage:** The OTP is stored in Redis cache with an absolute TTL (5 minutes) mapped to `otp:${mobile_number}`.
+3.  **Validate & Authenticate:** The client submits the OTP. The handler checks Redis. If matched, it deletes the passcode immediately (single-use constraint) and queries the External Integration Point.
+4.  **Device Binding Constraint:** The server fetches the member's latest database token metadata. If an active session is bound to a different `deviceId`, login is rejected with a `DeviceBindingError`, blocking credential reuse.
+5.  **Secure JWT Issuance:** 
+    *   Generates a cryptographically strong session-level random `salt`.
+    *   Creates a unique session record (`RefreshTokenEntity`) in PostgreSQL, storing only a SHA-256 hash of the token identifier (`jti`). Plaintext tokens are never stored!
+    *   Signs and returns two JWT tokens:
+        *   **Access Token (60-minute expiry):** Symmetric signature (`HS256`) carrying user claims, the session `salt`, and identity metadata.
+        *   **Refresh Token (365-day expiry):** Symmetric signature carrying the unique `jti` matching the hashed db row.
+
+### 5.2 Session Revocation (`JwtAuthGuard`)
+Every authenticated HTTP request is validated through the `JwtAuthGuard`:
+1.  Validates the Access Token signature, issuer, audience, and expiration constraints.
+2.  Extracts the member's `external_id` from the payload.
+3.  Performs a real-time **server-side presence check**: queries the database to confirm that the `external_id` currently has at least one active, non-revoked session (`refresh_tokens` or compatibility `api_tokens`).
+4.  **Instant Revocation:** If a session was revoked (e.g., via a remote logout command or security lock), the guard fails immediately with a `401 Unauthorized` response, nullifying the remaining life of the client-held access token.
+
+### 5.3 Object-Level Authorization (`MemberOwnershipGuard`)
+To protect resource endpoints (e.g., fetching profile data, editing subscriptions) from direct object reference attacks (ID harvesting), the `MemberOwnershipGuard` checks object ownership:
+1.  **Extract Resource Owner:** Resolves the requested `memberId` or `personKey` from the HTTP request parameters, body, or query string.
+2.  **Direct Check:** If the client's JWT `external_id` matches the target resource ID, access is permitted.
+3.  **Child Accounts Traversal (with Caching):** If they do not match, the guard queries the External Integration Point API to retrieve all child accounts registered under the parent's `external_id`.
+4.  **Performance Optimization:** Since family hierarchies rarely change, child lists are stored in Redis using a 3-day TTL (`external-integration:children:${parent_id}`).
+5.  If the resource ID belongs to one of the child accounts, access is approved; otherwise, a `403 Forbidden` response is returned.
+
+---
+
+## 6. MiniStack: Local Cloud Simulation
+
+**MiniStack** is a highly optimized local cloud simulation container that replaces heavy LocalStack runtimes. It is configured and managed under `docker-compose.yml` and bootstrapped via custom Node scripts.
+
+### 6.1 Unified Single-Port Architecture
+All emulated AWS services (S3, SQS) are accessible on a single unified port: `4566`.
+*   **Database Isolation:** Emulates RDS PostgreSQL on port `15432`.
+*   **Cache Isolation:** Emulates ElastiCache Redis on port `16379`.
+
+### 6.2 The Bootstrap Engine (`scripts/local/bootstrap-ministack.ts`)
+Executed during initial setup, this script automates local infrastructure setup:
+1.  **Health Verification:** Contacts the local MiniStack endpoint (`http://localhost:4566/_ministack/health`) to ensure container readiness.
+2.  **S3 Bucket Provisioning:** Creates the `bet-advise-local` bucket. It also configures private-by-default public access block policies.
+3.  **SQS Setup with DLQ Redrive Policy:** 
+    *   Creates a Dead-Letter Queue (DLQ) named `bet-advise-events-dlq` with a 14-day retention cycle.
+    *   Creates the main queue `bet-advise-events` with a 60-second visibility timeout, 20-second wait time (long polling), and a `RedrivePolicy` that automatically routes messages to the DLQ after `5` failed processing attempts.
+4.  **RDS & Cache Initiation:** Sends RDS and ElastiCache creation commands to MiniStack to register mock cloud resources.
+5.  **Port Probing:** Uses raw TCP socket handshakes to block execution until PostgreSQL (15432) and Redis (16379) are accepting connections.
+6.  **Secure Configuration Generator:** Generates `.env.local.generated` containing dynamic, validated configuration credentials, saving it as a template and copying it to `.env` for seamless developer integration.
+
+---
+
+## 7. Operational Scripts & Developer Commands
+
+The project uses `pnpm` to manage scripts for development, quality enforcement, and diagnostics:
 
 ```bash
-# 1. Aktywuj wersję Node i pnpm
-fnm use
-corepack enable
-corepack enable pnpm
-
-# 2. Zainstaluj zależności z zamrożonym lockfile
-pnpm install --frozen-lockfile
-
-# 3. Uruchom kontener MiniStack
+# Start the local MiniStack Docker container in the background
 pnpm local:up
 
-# 4. Inicjalizuj zasoby MiniStack (bucket S3, kolejki SQS, generowanie .env.local.generated)
+# Bootstrap S3 bucket, SQS queues, check database readiness, and write config files
 pnpm local:bootstrap
 
-# 5. Uruchom testy diagnostyczne (Doctor), aby potwierdzić, że usługi działają poprawnie
+# Run integration tests (S3 write/read, SQS publish/poll, DB query, Redis ping)
 pnpm local:doctor
 
-# 6. Uruchom aplikację w trybie deweloperskim (TypeORM automatycznie zsynchronizuje strukturę tabel lokalnie!)
+# Start NestJS application in hot-reload developer watch mode
 pnpm dev
-```
 
-Po uruchomieniu aplikacja będzie dostępna pod adresem:
-- API endpoints: `http://localhost:3000/api`
-- Swagger OpenAPI: `http://localhost:3000/docs`
-- Healthchecks:
-  - Live: `http://localhost:3000/api/health/live`
-  - Ready (pełna gotowość bazy, Redis, S3, SQS): `http://localhost:3000/api/health/ready`
+# Execute linting checks using ESLint
+pnpm lint
 
----
+# Execute typecheck safety validation
+pnpm typecheck
 
-## 6. AWS Production Ready Notes
+# Execute unit and repository tests using Jest
+pnpm test
 
-Przy wdrażaniu na chmurę produkcyjną AWS (np. ECS/EKS/App Runner):
-- **Baza danych:** Użyj AWS Aurora PostgreSQL 16. Wymuszone jest szyfrowanie połączeń TLS (`DATABASE_SSL=true` automatycznie dołącza parametr `sslmode=require`).
-- **Autoryzacja AWS:** static credentials (`AWS_ACCESS_KEY_ID` i `AWS_SECRET_ACCESS_KEY`) zostają puste. Aplikacja użyje automatycznie **AWS IAM Task Roles** z przypisanymi politykami dającymi uprawnienia do SQS/S3.
-- **S3 Bucket Security:** Wiadra S3 posiadają wyłączony publiczny dostęp (S3 Block Public Access). Odczyt plików odbywa się tylko przez serwer za pomocą uwierzytelnionych metod API.
-- **Wdrożenia bazy:** Lokalne schema synchronizacje są ograniczone wyłącznie do środowisk lokalnych (`synchronize: isLocal`). W produkcji automatyczna synchronizacja baz danych jest wyłączona (`synchronize: false`), a struktura tabel jest aplikowana przez migracje lub potoki CI/CD.
-- **ElastiCache Redis:** TLS jest konfigurowalny w chmurze (`REDIS_TLS=true`).
-
----
-
-## 7. MiniStack Fidelity Gaps (Różnice lokalne)
-- **IAM:** MiniStack nie weryfikuje poprawności uprawnień IAM — akceptuje dowolne dummy credentials (`test`/`test`) lokalnie. W produkcji uprawnienia ról IAM muszą być zdefiniowane za pomocą Terraform/CDK.
-- **Block Public Access:** Niektóre implementacje MiniStack S3 mogą nie egzekwować restrykcyjnych reguł Block Public Access w 100%, aczkolwiek deweloperski adapter konfiguruje te reguły w trybie defensive.
-- **Kolejkowanie SQS:** Czas reakcji emulowanego SQS w MiniStack może nieznacznie różnić się pod kątem precyzji opóźnień (visibility timeout) od realnego systemu AWS.
-
----
-
-## 8. Dostępne Skrypty i Polecenia
-
-- `pnpm local:up` — Uruchamia MiniStack w tle.
-- `pnpm local:bootstrap` — Tworzy bucket S3, kolejki SQS z Redrive Policy, sprawdza porty DB/Redis i tworzy plik `.env.local.generated`.
-- `pnpm local:doctor` — Odpala test integracyjny (S3 put/get/delete, SQS send/receive/delete, DB query, Redis ping) raportując PASS/FAIL.
-- `pnpm typecheck` — Statyczna kontrola typów TypeScript.
-- `pnpm lint` — Uruchomienie lintera (0 błędów, strict rule compliance).
-- `pnpm test` — Uruchomienie testów jednostkowych (wszystkie 11 testów przechodzi pomyślnie).
-- `pnpm build` — Kompilacja aplikacji produkcyjnej do folderu `dist/`.
-
----
-
-## 9. Testowanie
-
-Uruchomienie wszystkich testów i weryfikacji lintera:
-```bash
+# Run quality checks (Typecheck, Lint, Test, and Build)
 pnpm check
-```
 
-Uruchomienie testów E2E:
-```bash
+# Run end-to-end (E2E) integration lifecycle tests
 pnpm check:e2e
 ```
+
+---
+
+## 8. AWS Production Deployment Hardening
+
+To transition from MiniStack local emulation to standard production-grade AWS infrastructure:
+
+1.  **IAM Role Autoconfiguration (Zero-Trust):** 
+    In production, do not configure `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`. The AWS Client SDK automatically uses the **AWS Default Credential Provider Chain** to resolve permissions via **IAM Task Roles** assigned directly to the ECS Task or EKS Pod.
+2.  **Database SSL/TLS Enforcement:**
+    Set `DATABASE_SSL=true`. The system's Database Module automatically configures TypeORM's SSL settings to enforce secure TLS queries and protect against in-flight database sniffing:
+    ```typescript
+    ssl: ssl ? { rejectUnauthorized: false } : false
+    ```
+3.  **S3 Block Public Access:**
+    Production buckets must block public ACLs and public policies, routing all reads through the S3 Adapter.
+4.  **Schema Synchronize Security:**
+    In the Database Module, the `synchronize` property is restricted to local/test environments:
+    ```typescript
+    synchronize: isLocal // Disabled in production (use migrations)
+    ```
+    This prevents accidental data loss from automatic schema synchronization in production.
+
+---
+
+## 9. Comprehensive Architectural Code Review
+
+An expert-level analysis of the application codebase reveals several patterns, strengths, and areas for structural improvement.
+
+### 9.1 Strengths of the Implementation
+*   **Excellent Domain Purity:** The domain entities (`Match` and `Advice`) are decoupled from database details, ensuring they remain easy to test.
+*   **Robust Transaction Security:** The outbox event and core entities are saved inside an atomic database transaction using QueryRunner, preventing dual-write errors.
+*   **Idempotency Safety:** The `SqsConsumerService` proactively prevents message duplicate processing, maintaining database integrity even with SQS's *at-least-once* delivery behavior.
+*   **Secure Auth Design:** Using hashed refresh-token identifiers (`jti`) protects against session hijacking from database leaks, and the device-binding check is an effective security baseline.
+
+### 9.2 Critical Issues & Refactoring Opportunities
+
+#### Issue 1: Misleading Naming — `PrismaHealthIndicator`
+*   **Location:** `src/shared/infrastructure/health/prisma-health.indicator.ts`
+*   **Problem:** The health indicator is named `PrismaHealthIndicator` and is registered under the key `database` in the health controller. However, the class does not use Prisma; it injects and delegates to NestJS's `TypeOrmHealthIndicator`:
+    ```typescript
+    @Injectable()
+    export class PrismaHealthIndicator extends HealthIndicator {
+      constructor(private readonly typeOrm: TypeOrmHealthIndicator) { ... }
+      async isHealthy(key: string) { return this.typeOrm.pingCheck(key); }
+    }
+    ```
+*   **Impact:** Causes developer confusion regarding the data layer, suggesting a dual-ORM setup where none exists.
+*   **Refactoring Action:** Rename the file to `database-health.indicator.ts` and the class to `DatabaseHealthIndicator` to match the TypeORM database layer.
+
+#### Issue 2: Transaction Connection Leak Risk — Manually Handled QueryRunner
+*   **Location:** `src/advice/infrastructure/typeorm-advice.repository.ts`, lines 58-104
+*   **Problem:** The `createWithOutbox` method manages database connections manually. However, the `try` block starts *after* `connect()` and `startTransaction()` have already been called:
+    ```typescript
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      // Logic
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+    ```
+    If `connect()` or `startTransaction()` fails, the method exits without entering the `finally` block, causing the `QueryRunner` connection to leak.
+*   **Impact:** Under high API load or database connection pool pressure, this can leak active database connections, leading to database starvation.
+*   **Refactoring Action:** Enclose the setup steps within the `try` block, or initialize them before the block and check the connection status inside the `finally` block to ensure `release()` is always called.
+
+#### Issue 3: Polling Idempotency Ordering Vulnerability
+*   **Location:** `src/shared/infrastructure/queue/sqs-consumer.service.ts`, lines 112-160
+*   **Problem:** The SQS consumer checks idempotency first, then processes the message, and finally inserts the idempotency record and deletes the message from SQS:
+    ```typescript
+    // 1. Check
+    const alreadyProcessed = await this.processedRepo.findOne({ ... });
+    if (alreadyProcessed) { ... deleteMessage(); return; }
+    // 2. Process
+    if (eventType === 'ADVICE_GENERATED') { ... auditLogService.log(...) }
+    // 3. Persist Idempotency State
+    await this.processedRepo.save(this.processedRepo.create({ eventId, handlerName }));
+    await this.deleteMessage(...);
+    ```
+    If processing the message takes a long time, another consumer thread can pick up the same message (if the visibility timeout is exceeded) and process it concurrently because the idempotency row is not written until the end.
+*   **Impact:** Concurrent processing of duplicate messages remains possible during periods of high load.
+*   **Refactoring Action:** Insert the idempotency record (with a status like `PROCESSING`) *before* executing the message logic. If the insert fails due to a unique index violation, reject the message as a duplicate. Once processing completes, update the record's status to `COMPLETED`.
+
+#### Issue 4: Stateful Timer Scalability Constraints
+*   **Location:** `src/outbox/application/outbox-relay.service.ts`
+*   **Problem:** The `OutboxRelayService` runs on a local `setInterval` loop. While safe inside a single-instance development environment, if the monolit is scaled horizontally (e.g., across multiple container instances), all instances will run this relay simultaneously.
+*   **Impact:** Concurrent instances will repeatedly fetch the same pending outbox events, causing redundant publishes to SQS, database locks, and excess CPU utilization.
+*   **Refactoring Action:** 
+    1.  Transition the raw `outboxRepo.find` to a database-backed cursor lock: `SELECT ... FOR UPDATE SKIP LOCKED` inside TypeORM. This prevents instances from picking up the same event records.
+    2.  Alternatively, use a distributed scheduler or run the outbox relay task as a single-replica worker container.
+
+#### Issue 5: Hardcoded Token and Expiry Configuration in Auth Domain
+*   **Location:** `src/auth/domain/auth-constants.ts`
+*   **Problem:** Token lifetimes (`ACCESS_TOKEN_TTL_MS`, `REFRESH_TOKEN_TTL_MS`) are hardcoded in the domain layer, while the configuration module in the infrastructure layer (`JwtTokenService`) has separate, configurable values (`jwt.accessTokenTtl`, `jwt.refreshTokenTtl`).
+*   **Impact:** Leads to drift between the actual JWT expiry and the session records stored in the database.
+*   **Refactoring Action:** Align lifetimes by injecting the configured TTLs into the login handler or retrieving them from a unified configuration provider rather than hardcoding them in the domain layer.

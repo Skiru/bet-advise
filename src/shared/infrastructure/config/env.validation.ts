@@ -37,4 +37,10 @@ export const envValidationSchema = Joi.object({
   OUTBOX_RELAY_INTERVAL_MS: Joi.number().integer().min(100).default(5000),
   OUTBOX_RELAY_BATCH_SIZE: Joi.number().integer().min(1).default(10),
   OUTBOX_RELAY_MAX_ATTEMPTS: Joi.number().integer().min(1).default(5),
+
+  JWT_SECRET: Joi.string().default('super-secret'),
+  JWT_ISSUER: Joi.string().default('bet-advise'),
+  JWT_AUDIENCE: Joi.string().default('mobile-app'),
+  JWT_ACCESS_TOKEN_TTL: Joi.string().default('60m'),
+  JWT_REFRESH_TOKEN_TTL: Joi.string().default('365d'),
 });

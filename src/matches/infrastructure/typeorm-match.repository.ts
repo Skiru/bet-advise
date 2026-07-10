@@ -5,9 +5,10 @@ import { MatchEntity } from './entities/match.entity';
 import { Match } from '../domain/match.entity';
 import { MatchStatus } from '../domain/match-status.enum';
 import { randomUUID } from 'crypto';
+import { IMatchRepository } from '../application/ports/match-repository.port';
 
 @Injectable()
-export class TypeOrmMatchRepository {
+export class TypeOrmMatchRepository implements IMatchRepository {
   constructor(
     @InjectRepository(MatchEntity)
     private readonly repo: Repository<MatchEntity>,

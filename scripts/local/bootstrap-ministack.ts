@@ -9,10 +9,7 @@ import {
   CreateQueueCommand,
   GetQueueAttributesCommand,
 } from '@aws-sdk/client-sqs';
-import {
-  RDSClient,
-  CreateDBInstanceCommand,
-} from '@aws-sdk/client-rds';
+import { RDSClient, CreateDBInstanceCommand } from '@aws-sdk/client-rds';
 import {
   ElastiCacheClient,
   CreateCacheClusterCommand,

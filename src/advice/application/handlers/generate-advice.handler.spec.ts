@@ -2,17 +2,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GenerateAdviceHandler } from './generate-advice.handler';
 import { GenerateAdviceCommand } from '../commands/generate-advice.command';
-import { TypeOrmAdviceRepository } from '../../infrastructure/typeorm-advice.repository';
-import { TypeOrmMatchRepository } from '../../../matches/infrastructure/typeorm-match.repository';
-import { AuditLogService } from '../../../audit/application/audit-log.service';
+import { ADVICE_REPOSITORY_PORT } from '../ports/advice-repository.port';
+import { MATCHES_MODULE_API } from '../../../matches/interfaces/module-api/matches-module.api.interface';
+import { AUDIT_MODULE_API } from '../../../audit/interfaces/module-api/audit-module.api.interface';
 import { EventBus } from '@nestjs/cqrs';
 import { NotFoundDomainError } from '../../../shared/domain/domain-error';
 
 describe('GenerateAdviceHandler', () => {
   let handler: GenerateAdviceHandler;
   let mockAdviceRepository: { createWithOutbox: jest.Mock };
-  let mockMatchRepository: { findById: jest.Mock };
-  let mockAuditLogService: { log: jest.Mock };
+  let mockMatchesApi: { findById: jest.Mock };
+  let mockAuditApi: { log: jest.Mock };
   let mockEventBus: { publish: jest.Mock };
 
   beforeEach(async () => {
@@ -28,11 +28,11 @@ describe('GenerateAdviceHandler', () => {
       }),
     };
 
-    mockMatchRepository = {
+    mockMatchesApi = {
       findById: jest.fn(),
     };
 
-    mockAuditLogService = {
+    mockAuditApi = {
       log: jest.fn().mockResolvedValue(null),
     };
 
@@ -43,9 +43,9 @@ describe('GenerateAdviceHandler', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GenerateAdviceHandler,
-        { provide: TypeOrmAdviceRepository, useValue: mockAdviceRepository },
-        { provide: TypeOrmMatchRepository, useValue: mockMatchRepository },
-        { provide: AuditLogService, useValue: mockAuditLogService },
+        { provide: ADVICE_REPOSITORY_PORT, useValue: mockAdviceRepository },
+        { provide: MATCHES_MODULE_API, useValue: mockMatchesApi },
+        { provide: AUDIT_MODULE_API, useValue: mockAuditApi },
         { provide: EventBus, useValue: mockEventBus },
       ],
     }).compile();
@@ -54,18 +54,18 @@ describe('GenerateAdviceHandler', () => {
   });
 
   it('should fail when match does not exist', async () => {
-    mockMatchRepository.findById.mockResolvedValue(null);
+    mockMatchesApi.findById.mockResolvedValue(null);
 
     const command = new GenerateAdviceCommand('match-not-exist');
 
     await expect(handler.execute(command)).rejects.toThrow(NotFoundDomainError);
     expect(mockAdviceRepository.createWithOutbox).not.toHaveBeenCalled();
-    expect(mockAuditLogService.log).not.toHaveBeenCalled();
+    expect(mockAuditApi.log).not.toHaveBeenCalled();
     expect(mockEventBus.publish).not.toHaveBeenCalled();
   });
 
   it('should create advice, save outbox/audit, and publish event', async () => {
-    mockMatchRepository.findById.mockResolvedValue({
+    mockMatchesApi.findById.mockResolvedValue({
       id: 'match-123',
       homeTeam: 'Arsenal',
       awayTeam: 'Chelsea',
@@ -82,7 +82,7 @@ describe('GenerateAdviceHandler', () => {
       confidence: 62,
       rationale: expect.any(String),
     });
-    expect(mockAuditLogService.log).toHaveBeenCalledWith(
+    expect(mockAuditApi.log).toHaveBeenCalledWith(
       'ADVICE_GENERATED',
       'Advice',
       'advice-123',

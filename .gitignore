@@ -8,6 +8,7 @@ coverage
 .local-backup-before-nest-hardening
 .local-backup-before-aws-ministack-hardening
 var/ministack
+specifications
 
 # IDEs
 .idea

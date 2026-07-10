@@ -6,6 +6,7 @@ import redisConfig from './shared/infrastructure/config/redis.config';
 import awsConfig from './shared/infrastructure/config/aws.config';
 import s3Config from './shared/infrastructure/config/s3.config';
 import sqsConfig from './shared/infrastructure/config/sqs.config';
+import jwtConfig from './shared/infrastructure/config/jwt.config';
 import { envValidationSchema } from './shared/infrastructure/config/env.validation';
 
 import { AwsClientsModule } from './shared/infrastructure/aws/aws-clients.module';
@@ -18,6 +19,7 @@ import { OutboxModule } from './outbox/outbox.module';
 import { AuditModule } from './audit/audit.module';
 import { MatchesModule } from './matches/matches.module';
 import { AdviceModule } from './advice/advice.module';
+import { AuthModule } from './auth/auth.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -32,6 +34,7 @@ import { AppService } from './app.service';
         awsConfig,
         s3Config,
         sqsConfig,
+        jwtConfig,
       ],
       validationSchema: envValidationSchema,
       validationOptions: {
@@ -49,6 +52,7 @@ import { AppService } from './app.service';
     AuditModule,
     MatchesModule,
     AdviceModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

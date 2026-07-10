@@ -1,13 +1,18 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { Inject } from '@nestjs/common';
 import { CreateMatchCommand } from '../commands/create-match.command';
-import { TypeOrmMatchRepository } from '../../infrastructure/typeorm-match.repository';
-import { AuditLogService } from '../../../audit/application/audit-log.service';
+import { MATCH_REPOSITORY_PORT } from '../ports/match-repository.port';
+import type { IMatchRepository } from '../ports/match-repository.port';
+import { AUDIT_MODULE_API } from '../../../audit/interfaces/module-api/audit-module.api.interface';
+import type { IAuditModuleApi } from '../../../audit/interfaces/module-api/audit-module.api.interface';
 
 @CommandHandler(CreateMatchCommand)
 export class CreateMatchHandler implements ICommandHandler<CreateMatchCommand> {
   constructor(
-    private readonly repository: TypeOrmMatchRepository,
-    private readonly auditLogService: AuditLogService,
+    @Inject(MATCH_REPOSITORY_PORT)
+    private readonly repository: IMatchRepository,
+    @Inject(AUDIT_MODULE_API)
+    private readonly auditApi: IAuditModuleApi,
   ) {}
 
   async execute(command: CreateMatchCommand) {
@@ -18,13 +23,10 @@ export class CreateMatchHandler implements ICommandHandler<CreateMatchCommand> {
       externalId: command.externalId,
     });
 
-    await this.auditLogService.log(
-      'MATCH_CREATED',
-      'Match',
-      match.id,
-      'system',
-      { homeTeam: match.homeTeam, awayTeam: match.awayTeam },
-    );
+    await this.auditApi.log('MATCH_CREATED', 'Match', match.id, 'system', {
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+    });
 
     return match;
   }

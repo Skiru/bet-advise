@@ -1,10 +1,15 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
+import { Inject } from '@nestjs/common';
 import { ListAdviceQuery } from '../queries/list-advice.query';
-import { TypeOrmAdviceRepository } from '../../infrastructure/typeorm-advice.repository';
+import { ADVICE_REPOSITORY_PORT } from '../ports/advice-repository.port';
+import type { IAdviceRepository } from '../ports/advice-repository.port';
 
 @QueryHandler(ListAdviceQuery)
 export class ListAdviceHandler implements IQueryHandler<ListAdviceQuery> {
-  constructor(private readonly repository: TypeOrmAdviceRepository) {}
+  constructor(
+    @Inject(ADVICE_REPOSITORY_PORT)
+    private readonly repository: IAdviceRepository,
+  ) {}
 
   async execute(query: ListAdviceQuery) {
     if (query.matchId) {

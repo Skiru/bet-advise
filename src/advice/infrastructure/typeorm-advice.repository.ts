@@ -6,9 +6,10 @@ import { OutboxEventEntity } from '../../outbox/infrastructure/entities/outbox-e
 import { Advice } from '../domain/advice.entity';
 import { AdviceStatus } from '../domain/advice-status.enum';
 import { randomUUID } from 'crypto';
+import { IAdviceRepository } from '../application/ports/advice-repository.port';
 
 @Injectable()
-export class TypeOrmAdviceRepository {
+export class TypeOrmAdviceRepository implements IAdviceRepository {
   constructor(
     @InjectRepository(AdviceEntity)
     private readonly repo: Repository<AdviceEntity>,

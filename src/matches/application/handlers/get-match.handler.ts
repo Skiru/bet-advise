@@ -1,11 +1,16 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
+import { Inject } from '@nestjs/common';
 import { GetMatchQuery } from '../queries/get-match.query';
-import { TypeOrmMatchRepository } from '../../infrastructure/typeorm-match.repository';
+import { MATCH_REPOSITORY_PORT } from '../ports/match-repository.port';
+import type { IMatchRepository } from '../ports/match-repository.port';
 import { NotFoundDomainError } from '../../../shared/domain/domain-error';
 
 @QueryHandler(GetMatchQuery)
 export class GetMatchHandler implements IQueryHandler<GetMatchQuery> {
-  constructor(private readonly repository: TypeOrmMatchRepository) {}
+  constructor(
+    @Inject(MATCH_REPOSITORY_PORT)
+    private readonly repository: IMatchRepository,
+  ) {}
 
   async execute(query: GetMatchQuery) {
     const match = await this.repository.findById(query.id);
