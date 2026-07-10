@@ -1,6 +1,6 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { generateUuidV7 } from '../../../shared/domain/uuid';
 import { RefreshTokenCommand } from '../commands/refresh-token.command';
 import { RefreshTokenRepositoryPortToken } from '../ports/refresh-token-repository.port';
 import type { RefreshTokenRepositoryPort } from '../ports/refresh-token-repository.port';
@@ -86,7 +86,7 @@ export class RefreshTokenHandler implements ICommandHandler<RefreshTokenCommand>
       now.getTime() + REFRESH_TOKEN_TTL_MS,
     );
 
-    const newJti = randomUUID();
+    const newJti = generateUuidV7();
     const newHash = this.hashService.sha256(newJti);
 
     const newRefreshTokenEntity = RefreshToken.create(

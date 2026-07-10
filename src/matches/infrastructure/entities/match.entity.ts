@@ -4,9 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
-import { AdviceEntity } from '../../../advice/infrastructure/entities/advice.entity';
 
 @Entity('matches')
 export class MatchEntity {
@@ -33,7 +31,4 @@ export class MatchEntity {
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt!: Date;
-
-  @OneToMany(() => AdviceEntity, (advice) => advice.match)
-  advice!: AdviceEntity[];
 }

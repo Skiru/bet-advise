@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLogEntity } from './entities/audit-log.entity';
-import { randomUUID } from 'crypto';
+import { generateUuidV7 } from '../../shared/domain/uuid';
 
 @Injectable()
 export class TypeOrmAuditLogRepository {
@@ -19,7 +19,7 @@ export class TypeOrmAuditLogRepository {
     payload?: Record<string, unknown> | null,
   ): Promise<AuditLogEntity> {
     const entity = this.repo.create({
-      id: randomUUID(),
+      id: generateUuidV7(),
       actor,
       action,
       entityType,

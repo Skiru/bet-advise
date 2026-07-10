@@ -18,8 +18,7 @@ import { CacheModule } from '../shared/infrastructure/cache/cache.module';
 import { AuditModule } from '../audit/audit.module';
 
 // Handlers
-import { SendOtpHandler } from './application/handlers/send-otp.handler';
-import { LoginUsingOtpHandler } from './application/handlers/login-using-otp.handler';
+import { LoginHandler } from './application/handlers/login.handler';
 import { RefreshTokenHandler } from './application/handlers/refresh-token.handler';
 import { LogoutHandler } from './application/handlers/logout.handler';
 import { UpdateOneSignalSubIdHandler } from './application/handlers/update-onesignal.handler';
@@ -54,8 +53,7 @@ import { UpdateOneSignalSubIdHandler } from './application/handlers/update-onesi
       useClass: Sha256HashService,
     },
     // Command Handlers
-    SendOtpHandler,
-    LoginUsingOtpHandler,
+    LoginHandler,
     RefreshTokenHandler,
     LogoutHandler,
     UpdateOneSignalSubIdHandler,

@@ -12,11 +12,9 @@ import {
 import { CommandBus } from '@nestjs/cqrs';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { SendOtpDto } from './dto/send-otp.dto';
-import { LoginUsingOtpDto } from './dto/login-using-otp.dto';
+import { LoginDto } from './dto/login.dto';
 import { UpdateOneSignalSubIdDto } from './dto/update-onesignal.dto';
-import { SendOtpCommand } from '../../application/commands/send-otp.command';
-import { LoginUsingOtpCommand } from '../../application/commands/login-using-otp.command';
+import { LoginCommand } from '../../application/commands/login.command';
 import { RefreshTokenCommand } from '../../application/commands/refresh-token.command';
 import { LogoutCommand } from '../../application/commands/logout.command';
 import { UpdateOneSignalSubIdCommand } from '../../application/commands/update-onesignal.command';
@@ -29,39 +27,22 @@ import { CurrentUser } from './decorators/current-user.decorator';
 export class AuthController {
   constructor(private readonly commandBus: CommandBus) {}
 
-  @Post('send-otp')
+  @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send a one-time passcode to mobile' })
-  @ApiResponse({
-    status: 200,
-    description: 'OTP successfully generated and stored.',
-  })
-  async sendOtp(@Body() dto: SendOtpDto, @Req() request: Request) {
-    const userAgent = request.headers['user-agent'] || null;
-    const ipAddress = request.ip || null;
-
-    return this.commandBus.execute(
-      new SendOtpCommand(dto.mobile, dto.deviceId, userAgent, ipAddress),
-    );
-  }
-
-  @Post('login-using-otp')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login using one-time passcode' })
+  @ApiOperation({ summary: 'Login using mobile number' })
   @ApiResponse({
     status: 200,
     description: 'Successfully authenticated, JWTs issued.',
   })
-  async loginUsingOtp(@Body() dto: LoginUsingOtpDto, @Req() request: Request) {
+  async login(@Body() dto: LoginDto, @Req() request: Request) {
     const userAgent = request.headers['user-agent'] || null;
     const ipAddress = request.ip || null;
 
     return this.commandBus.execute(
-      new LoginUsingOtpCommand(
+      new LoginCommand(
         dto.mobile,
-        dto.otp,
         dto.deviceId,
-        dto.deviceDetails,
+        dto.deviceDetails || null,
         userAgent,
         ipAddress,
       ),

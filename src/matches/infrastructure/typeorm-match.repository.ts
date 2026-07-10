@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { MatchEntity } from './entities/match.entity';
 import { Match } from '../domain/match.entity';
 import { MatchStatus } from '../domain/match-status.enum';
-import { randomUUID } from 'crypto';
+import { generateUuidV7 } from '../../shared/domain/uuid';
 import { IMatchRepository } from '../application/ports/match-repository.port';
 
 @Injectable()
@@ -45,7 +45,7 @@ export class TypeOrmMatchRepository implements IMatchRepository {
     externalId?: string;
   }): Promise<Match> {
     const entity = this.repo.create({
-      id: randomUUID(),
+      id: generateUuidV7(),
       homeTeam: data.homeTeam,
       awayTeam: data.awayTeam,
       kickoffAt: data.kickoffAt,

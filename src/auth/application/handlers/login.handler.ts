@@ -1,7 +1,7 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { LoginUsingOtpCommand } from '../commands/login-using-otp.command';
+import { generateUuidV7 } from '../../../shared/domain/uuid';
+import { LoginCommand } from '../commands/login.command';
 import { ExternalIntegrationPointServicePortToken } from '../ports/external-integration-point-service.port';
 import type { ExternalIntegrationPointServicePort } from '../ports/external-integration-point-service.port';
 import { RefreshTokenRepositoryPortToken } from '../ports/refresh-token-repository.port';
@@ -23,15 +23,13 @@ import {
   REFRESH_TOKEN_TTL_MS,
 } from '../../domain/auth-constants';
 import {
-  InvalidOtpError,
-  OtpExpiredError,
   UserNotFoundError,
   DeviceBindingError,
   AuthenticationError,
 } from '../../domain/auth-errors';
 
-@CommandHandler(LoginUsingOtpCommand)
-export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpCommand> {
+@CommandHandler(LoginCommand)
+export class LoginHandler implements ICommandHandler<LoginCommand> {
   constructor(
     @Inject(ExternalIntegrationPointServicePortToken)
     private readonly externalIntegrationService: ExternalIntegrationPointServicePort,
@@ -49,21 +47,10 @@ export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpComman
     private readonly auditApi: IAuditModuleApi,
   ) {}
 
-  async execute(command: LoginUsingOtpCommand) {
+  async execute(command: LoginCommand) {
     const normalizedMobile = command.mobile.replace(/\s+/g, '');
 
-    // 1. Verify OTP
-    const cachedOtp = await this.cache.get<string>(`otp:${normalizedMobile}`);
-    if (!cachedOtp) {
-      throw new OtpExpiredError();
-    }
-    if (cachedOtp !== command.otp) {
-      throw new InvalidOtpError();
-    }
-    // Delete OTP once verified successfully
-    await this.cache.delete(`otp:${normalizedMobile}`);
-
-    // 2. Load member from external integration point
+    // 1. Load member from external integration point
     const member =
       await this.externalIntegrationService.findPersonByMobile(
         normalizedMobile,
@@ -72,12 +59,12 @@ export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpComman
       throw new UserNotFoundError(normalizedMobile);
     }
 
-    // 3. Reject disabled members
+    // 2. Reject disabled members
     if (member.isDisabled) {
       throw new AuthenticationError('Your account has been disabled.');
     }
 
-    // 4. Device Binding Check
+    // 3. Device Binding Check
     // Get the latest refresh token to verify device binding
     const latestToken =
       await this.refreshTokenRepository.findLatestByExternalId(
@@ -87,16 +74,16 @@ export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpComman
       throw new DeviceBindingError();
     }
 
-    // 5. Generate session salt
+    // 4. Generate session salt
     const salt = this.hashService.generateSalt();
 
-    // 6. Calculate expiries
+    // 5. Calculate expiries
     const now = new Date();
     const accessTokenExpiry = new Date(now.getTime() + ACCESS_TOKEN_TTL_MS);
     const refreshTokenExpiry = new Date(now.getTime() + REFRESH_TOKEN_TTL_MS);
 
-    // 7. Mint Refresh Token row
-    const jti = randomUUID();
+    // 6. Mint Refresh Token row
+    const jti = generateUuidV7();
     const tokenHash = this.hashService.sha256(jti);
 
     const refreshTokenEntity = RefreshToken.create(
@@ -118,7 +105,7 @@ export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpComman
 
     await this.refreshTokenRepository.save(refreshTokenEntity);
 
-    // 8. Mint Access and Refresh JWTs
+    // 7. Mint Access and Refresh JWTs
     const identityClaims = {
       external_id: member.externalId,
       preferred_bookmaker: member.preferredBookmaker,
@@ -137,7 +124,7 @@ export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpComman
       type: 'refresh',
     });
 
-    // 9. Upsert Legacy ApiToken for backward compatibility
+    // 8. Upsert Legacy ApiToken for backward compatibility
     await this.apiTokenRepository.deleteByExternalId(member.externalId);
 
     const legacyTokenStr = this.hashService.generateRandomToken();
@@ -155,10 +142,10 @@ export class LoginUsingOtpHandler implements ICommandHandler<LoginUsingOtpComman
 
     await this.apiTokenRepository.save(apiTokenEntity);
 
-    // 10. Cache active session status to true
+    // 9. Cache active session status to true
     await this.cache.set(`session:active:${member.externalId}`, true, 300);
 
-    // 11. Log Audit trail
+    // 10. Log Audit trail
     await this.auditApi.log(
       'USER_LOGGED_IN',
       'Member',

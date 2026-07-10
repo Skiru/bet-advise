@@ -4,10 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
 } from 'typeorm';
-import { MatchEntity } from '../../../matches/infrastructure/entities/match.entity';
 
 @Entity('advice')
 export class AdviceEntity {
@@ -16,12 +13,6 @@ export class AdviceEntity {
 
   @Column()
   matchId!: string;
-
-  @ManyToOne(() => MatchEntity, (match) => match.advice, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'matchId' })
-  match!: MatchEntity;
 
   @Column()
   market!: string;

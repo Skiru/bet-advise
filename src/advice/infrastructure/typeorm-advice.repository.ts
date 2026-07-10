@@ -5,7 +5,7 @@ import { AdviceEntity } from './entities/advice.entity';
 import { OutboxEventEntity } from '../../outbox/infrastructure/entities/outbox-event.entity';
 import { Advice } from '../domain/advice.entity';
 import { AdviceStatus } from '../domain/advice-status.enum';
-import { randomUUID } from 'crypto';
+import { generateUuidV7 } from '../../shared/domain/uuid';
 import { IAdviceRepository } from '../application/ports/advice-repository.port';
 
 @Injectable()
@@ -61,8 +61,8 @@ export class TypeOrmAdviceRepository implements IAdviceRepository {
     await queryRunner.startTransaction();
 
     try {
-      const adviceId = randomUUID();
-      const eventId = randomUUID();
+      const adviceId = generateUuidV7();
+      const eventId = generateUuidV7();
 
       const adviceEntity = queryRunner.manager.create(AdviceEntity, {
         id: adviceId,

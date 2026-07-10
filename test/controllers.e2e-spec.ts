@@ -73,26 +73,9 @@ describe('Controllers E2E Tests', () => {
   });
 
   describe('AuthController Flow', () => {
-    let otpCode: string;
-
-    it('POST /api/auth/send-otp (should send OTP for valid member)', () => {
+    it('POST /api/auth/login (should fail with 400 for invalid member mobile)', () => {
       return request(app.getHttpServer())
-        .post('/api/auth/send-otp')
-        .send({
-          mobile: '+4511223344',
-          deviceId: 'device-test-id',
-        })
-        .expect(200)
-        .then((res) => {
-          expect(res.body.mobile).toBe('+4511223344');
-          expect(res.body.otp).toBeDefined();
-          otpCode = res.body.otp;
-        });
-    });
-
-    it('POST /api/auth/send-otp (should fail with 400 for invalid member mobile)', () => {
-      return request(app.getHttpServer())
-        .post('/api/auth/send-otp')
+        .post('/api/auth/login')
         .send({
           mobile: '+4500000000',
           deviceId: 'device-test-id',
@@ -100,23 +83,11 @@ describe('Controllers E2E Tests', () => {
         .expect(400);
     });
 
-    it('POST /api/auth/login-using-otp (should fail with 422 for incorrect OTP)', () => {
+    it('POST /api/auth/login (should succeed with correct mobile)', () => {
       return request(app.getHttpServer())
-        .post('/api/auth/login-using-otp')
+        .post('/api/auth/login')
         .send({
           mobile: '+4511223344',
-          otp: '9999',
-          deviceId: 'device-test-id',
-        })
-        .expect(422);
-    });
-
-    it('POST /api/auth/login-using-otp (should succeed with correct OTP)', () => {
-      return request(app.getHttpServer())
-        .post('/api/auth/login-using-otp')
-        .send({
-          mobile: '+4511223344',
-          otp: otpCode,
           deviceId: 'device-test-id',
           deviceDetails: 'TestRunner Simulator',
         })
