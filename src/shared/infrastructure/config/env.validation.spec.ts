@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { envValidationSchema } from './env.validation';
 
 describe('envValidationSchema', () => {

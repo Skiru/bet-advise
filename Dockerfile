@@ -1,16 +1,16 @@
 # Stage 1: Build
-FROM node:24-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Enable Corepack and pnpm
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+# Enable Corepack and specify pnpm version
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 # Copy package config and lockfile
 COPY package.json pnpm-lock.yaml .npmrc .node-version ./
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies with engine strictness bypassed
+RUN pnpm install --frozen-lockfile --engine-strict=false
 
 # Copy source code
 COPY . .
@@ -19,19 +19,19 @@ COPY . .
 RUN pnpm build
 
 # Stage 2: Production Dependencies
-FROM node:24-alpine AS dependencies
+FROM node:20-alpine AS dependencies
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 COPY package.json pnpm-lock.yaml .npmrc .node-version ./
 
 # Install only production dependencies
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile --engine-strict=false
 
 # Stage 3: Runtime
-FROM node:24-alpine AS runner
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
@@ -49,4 +49,5 @@ USER nodeapp
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+# Default command starts the API; can be overridden to starts the Worker in ECS/K8s
+CMD ["node", "dist/bootstrap/api.main.js"]

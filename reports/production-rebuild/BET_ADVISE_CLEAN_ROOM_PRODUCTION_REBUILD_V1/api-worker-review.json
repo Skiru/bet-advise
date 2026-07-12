@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "BET_ADVISE_CLEAN_ROOM_PRODUCTION_REBUILD_V1",
+  "repository": "Skiru/bet-advise",
+  "packageName": "bet-advise",
+  "cleanStartSha": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "currentHead": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "timestampUtc": "2026-07-12T22:03:29Z",
+  "apiWorkerReview": {
+    "bootstrapApiDecoupled": "src/bootstrap/api.main.ts",
+    "bootstrapWorkerDecoupled": "src/bootstrap/worker.main.ts",
+    "apiModuleCompositionIsolated": "ApiAppModule",
+    "workerModuleCompositionIsolated": "WorkerAppModule",
+    "status": "PASS"
+  }
+}

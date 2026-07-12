@@ -1,11 +1,11 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import { SqsConsumerService } from './sqs-consumer.service';
 
 describe('SqsConsumerService', () => {
   let service: SqsConsumerService;
   let mockSqsClient: any;
   let mockConfigService: any;
-  let mockPrisma: any;
+  let mockInboxRepo: any;
   let mockAudit: any;
 
   beforeEach(() => {
@@ -18,11 +18,16 @@ describe('SqsConsumerService', () => {
         return undefined;
       }),
     };
-    mockPrisma = {
-      processedMessage: {
-        findUnique: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({}),
-      },
+    mockInboxRepo = {
+      create: jest.fn().mockImplementation((val) => val),
+      save: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({}),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        delete: jest.fn().mockReturnThis(),
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      }),
     };
     mockAudit = {
       log: jest.fn().mockResolvedValue({}),
@@ -33,17 +38,12 @@ describe('SqsConsumerService', () => {
       getTenantId: () => 'default',
     };
 
-    const mockPublicIntegration = {
-      sendAdviceGenerated: jest.fn().mockResolvedValue(undefined),
-    };
-
     service = new SqsConsumerService(
       mockSqsClient,
       mockConfigService,
-      mockPrisma,
+      mockInboxRepo,
       mockAudit,
       mockTenantContext as any,
-      mockPublicIntegration as any,
     );
   });
 

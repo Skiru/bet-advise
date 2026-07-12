@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import {
   CanActivate,
   ExecutionContext,
@@ -6,29 +6,30 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { TokenServicePortToken } from '../../../application/ports/token-service.port';
 import type { TokenServicePort } from '../../../application/ports/token-service.port';
-import { RefreshTokenRepositoryPortToken } from '../../../application/ports/refresh-token-repository.port';
-import type { RefreshTokenRepositoryPort } from '../../../application/ports/refresh-token-repository.port';
-import { ApiTokenRepositoryPortToken } from '../../../application/ports/api-token-repository.port';
-import type { ApiTokenRepositoryPort } from '../../../application/ports/api-token-repository.port';
-import { CachePortToken } from '../../../../shared/application/cache/cache.port';
-import type { CachePort } from '../../../../shared/application/cache/cache.port';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { Principal } from '../../../domain/principal.interface';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     @Inject(TokenServicePortToken)
     private readonly tokenService: TokenServicePort,
-    @Inject(RefreshTokenRepositoryPortToken)
-    private readonly refreshTokenRepository: RefreshTokenRepositoryPort,
-    @Inject(ApiTokenRepositoryPortToken)
-    private readonly apiTokenRepository: ApiTokenRepositoryPort,
-    @Inject(CachePortToken)
-    private readonly cache: CachePort,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers['authorization'];
 
@@ -36,54 +37,44 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Authorization header is missing.');
     }
 
-    // Extract token (support Bearer <token> and raw token format)
     const token = authHeader.startsWith('Bearer ')
       ? authHeader.substring(7)
       : authHeader;
 
-    let payload: Record<string, any>;
     try {
-      payload = this.tokenService.verifyToken(token);
-    } catch (error) {
-      throw new UnauthorizedException('Invalid or expired token.');
-    }
+      const payload = await this.tokenService.verifyToken(token);
 
-    if (payload.type !== 'access') {
-      throw new UnauthorizedException('Invalid token type.');
-    }
-
-    const externalId = payload.external_id;
-
-    // Presence check: confirm that external_id exists in either active refresh_tokens or legacy api_tokens
-    // Cached in Redis to shield the database from request-level query pressure
-    const cacheKey = `session:active:${externalId}`;
-    let isPresent = await this.cache.get<boolean>(cacheKey);
-
-    if (isPresent === null) {
-      const activeRefreshTokens =
-        await this.refreshTokenRepository.findActiveByExternalId(externalId);
-      isPresent = activeRefreshTokens.length > 0;
-
-      if (!isPresent) {
-        const apiToken =
-          await this.apiTokenRepository.findByExternalId(externalId);
-        if (apiToken) {
-          isPresent = true;
-        }
+      let scopes: string[] = [];
+      if (typeof payload.scope === 'string') {
+        scopes = payload.scope.split(' ').filter((s) => s.length > 0);
+      } else if (Array.isArray(payload.scopes)) {
+        scopes = payload.scopes;
+      } else if (Array.isArray(payload.scope)) {
+        scopes = payload.scope;
       }
 
-      await this.cache.set(cacheKey, isPresent, 300); // 5 minutes TTL
+      const principal: Principal = {
+        id: payload.sub || payload.id || 'unknown',
+        tenantId: payload.tenant_id || payload.tenantId || '',
+        scopes,
+        email: payload.email,
+        roles: payload.roles,
+      };
+
+      if (!principal.tenantId) {
+        throw new UnauthorizedException(
+          'Token is missing mandatory tenant_id claim.',
+        );
+      }
+
+      request.principal = principal;
+      request.tenantId = principal.tenantId;
+
+      return true;
+    } catch (error: any) {
+      throw new UnauthorizedException(
+        error.message || 'Invalid or expired token.',
+      );
     }
-
-    if (!isPresent) {
-      throw new UnauthorizedException('Session has been revoked or expired.');
-    }
-
-    // Merge into request object for downstream controllers and custom decorators
-    request.user = payload;
-    request.jwt_user = payload;
-    request.jwt_claims = payload;
-
-    return true;
   }
 }

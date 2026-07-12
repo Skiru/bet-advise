@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "BET_ADVISE_CLEAN_ROOM_PRODUCTION_REBUILD_V1",
+  "repository": "Skiru/bet-advise",
+  "packageName": "bet-advise",
+  "cleanStartSha": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "currentHead": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "timestampUtc": "2026-07-12T22:03:29Z",
+  "review": {
+    "removedUnusedAbstractions": [
+      "FilesController (exposing public S3 operations)",
+      "AppController and AppService (legacy monolith bootstrap/greetings)",
+      "MemberOwnershipGuard (replaced by standardized Scope-based policy authorization)",
+      "UpdateOneSignalSubIdCommand (removed push notifications session mapping compatibility)",
+      "ApiToken & RefreshToken entities, ports, and repositories (fully removed custom authentication mechanisms in favor of strict decentralized OIDC validation)"
+    ],
+    "remainingAbstractions": [
+      "Matches, Providers, Odds, Analysis, Advice, Coupons modules representing core domain business logic",
+      "TenantContext AsyncLocalStorage with PostgreSQL RLS defense in depth",
+      "Transactional Outbox (FOR UPDATE SKIP LOCKED) claiming relay",
+      "SqsConsumerService processing inbox messages idempotent"
+    ]
+  }
+}

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Test, TestingModule } from '@nestjs/testing';
 import { GenerateAdviceHandler } from './generate-advice.handler';
 import { GenerateAdviceCommand } from '../commands/generate-advice.command';
@@ -7,6 +6,7 @@ import { MATCHES_MODULE_API } from '../../../matches/interfaces/module-api/match
 import { AUDIT_MODULE_API } from '../../../audit/interfaces/module-api/audit-module.api.interface';
 import { EventBus } from '@nestjs/cqrs';
 import { NotFoundDomainError } from '../../../shared/domain/domain-error';
+import { TenantContext } from '../../../shared/infrastructure/tenant/tenant-context';
 
 describe('GenerateAdviceHandler', () => {
   let handler: GenerateAdviceHandler;
@@ -14,6 +14,7 @@ describe('GenerateAdviceHandler', () => {
   let mockMatchesApi: { findById: jest.Mock };
   let mockAuditApi: { log: jest.Mock };
   let mockEventBus: { publish: jest.Mock };
+  let mockTenantContext: { getTenantId: jest.Mock };
 
   beforeEach(async () => {
     mockAdviceRepository = {
@@ -21,10 +22,9 @@ describe('GenerateAdviceHandler', () => {
         id: 'advice-123',
         matchId: 'match-123',
         market: 'match_winner',
-        selection: 'home_or_draw',
-        confidence: 62,
-        rationale: 'Demo rationale',
-        status: 'GENERATED',
+        selection: 'home',
+        decision: 'RECOMMENDED',
+        rationale: 'Strong form',
       }),
     };
 
@@ -40,6 +40,10 @@ describe('GenerateAdviceHandler', () => {
       publish: jest.fn(),
     };
 
+    mockTenantContext = {
+      getTenantId: jest.fn().mockReturnValue('tenant-123'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GenerateAdviceHandler,
@@ -47,6 +51,7 @@ describe('GenerateAdviceHandler', () => {
         { provide: MATCHES_MODULE_API, useValue: mockMatchesApi },
         { provide: AUDIT_MODULE_API, useValue: mockAuditApi },
         { provide: EventBus, useValue: mockEventBus },
+        { provide: TenantContext, useValue: mockTenantContext },
       ],
     }).compile();
 
@@ -69,19 +74,22 @@ describe('GenerateAdviceHandler', () => {
       id: 'match-123',
       homeTeam: 'Arsenal',
       awayTeam: 'Chelsea',
+      status: 'SCHEDULED',
     });
 
     const command = new GenerateAdviceCommand('match-123');
     const result = await handler.execute(command);
 
     expect(result.id).toBe('advice-123');
-    expect(mockAdviceRepository.createWithOutbox).toHaveBeenCalledWith({
-      matchId: 'match-123',
-      market: 'match_winner',
-      selection: 'home_or_draw',
-      confidence: 62,
-      rationale: expect.any(String),
-    });
+    expect(mockAdviceRepository.createWithOutbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matchId: 'match-123',
+        market: 'match_winner',
+        selection: 'home',
+        decision: 'RECOMMENDED',
+        rejectionReason: null,
+      }),
+    );
     expect(mockAuditApi.log).toHaveBeenCalledWith(
       'ADVICE_GENERATED',
       'Advice',

@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import {
   Injectable,
   Inject,
@@ -15,10 +15,9 @@ import { SQS_CLIENT } from '../aws/aws-client-tokens';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ProcessedMessageEntity } from './entities/processed-message.entity';
+import { InboxMessageEntity } from './entities/processed-message.entity';
 import { AuditLogService } from '../../../audit/application/audit-log.service';
 import { TenantContext } from '../tenant/tenant-context';
-import { PublicIntegrationService } from '../integration/public-integration.service';
 
 @Injectable()
 export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
@@ -35,11 +34,10 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(SQS_CLIENT) private readonly sqsClient: SQSClient,
     private readonly configService: ConfigService,
-    @InjectRepository(ProcessedMessageEntity)
-    private readonly processedRepo: Repository<ProcessedMessageEntity>,
+    @InjectRepository(InboxMessageEntity)
+    private readonly inboxRepo: Repository<InboxMessageEntity>,
     private readonly auditLogService: AuditLogService,
     private readonly tenantContext: TenantContext,
-    private readonly publicIntegrationService: PublicIntegrationService,
   ) {
     this.queueUrl = this.configService.get<string>('sqs.queueUrl') || '';
     this.waitTimeSeconds =
@@ -56,15 +54,17 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
       this.running = true;
       this.pollPromise = this.pollLoop();
 
-      // Start periodic 24-hour cleanup of processed messages older than 7 days
-      this.cleanupIntervalId = setInterval(() => {
-        this.pruneOldProcessedMessages().catch((err) => {
-          this.logger.error('Failed to prune old processed messages:', err);
-        });
-      }, 24 * 60 * 60 * 1000);
+      // Prune messages older than 7 days daily
+      this.cleanupIntervalId = setInterval(
+        () => {
+          this.pruneOldInboxMessages().catch((err) => {
+            this.logger.error('Failed to prune old processed messages:', err);
+          });
+        },
+        24 * 60 * 60 * 1000,
+      );
 
-      // Trigger one prune cycle on boot asynchronously
-      this.pruneOldProcessedMessages().catch((err) => {
+      this.pruneOldInboxMessages().catch((err) => {
         this.logger.error('Failed to trigger initial message pruning:', err);
       });
     } else {
@@ -85,25 +85,22 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('SQS consumer stopped.');
   }
 
-  private async pruneOldProcessedMessages(): Promise<void> {
+  private async pruneOldInboxMessages(): Promise<void> {
     try {
-      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
-      const result = await this.processedRepo
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const result = await this.inboxRepo
         .createQueryBuilder()
         .delete()
-        .from(ProcessedMessageEntity)
+        .from(InboxMessageEntity)
         .where('processedAt < :cutoff', { cutoff })
         .execute();
       if (result.affected && result.affected > 0) {
         this.logger.log(
-          `Pruned old processed message records. Deleted rows count: ${result.affected}`,
+          `Pruned old inbox message records. Deleted count: ${result.affected}`,
         );
       }
     } catch (error) {
-      this.logger.error(
-        'Failed to prune old processed message entries:',
-        error,
-      );
+      this.logger.error('Failed to prune old inbox message entries:', error);
     }
   }
 
@@ -122,7 +119,6 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
 
         const messages = response.Messages || [];
         if (messages.length > 0) {
-          this.logger.log(`Received ${messages.length} messages from SQS`);
           for (const message of messages) {
             await this.processMessageWithRetry(message);
           }
@@ -137,90 +133,81 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
   private async processMessageWithRetry(message: any): Promise<void> {
     const body = JSON.parse(message.Body || '{}');
     const eventId = body.eventId || message.MessageId;
-    const eventType = body.type;
+    const eventType = body.type || body.eventType;
     const handlerName = 'SqsConsumerService';
 
     if (!eventType) {
       this.logger.warn(
-        `Message is missing 'type'. Deleting message. Content: ${message.Body}`,
+        `Message is missing 'type'. Deleting message. ID: ${eventId}`,
       );
       await this.deleteMessage(message.ReceiptHandle);
       return;
     }
 
-    this.logger.log(`Processing message ${eventId} of type ${eventType}`);
+    let tenantId = body.tenantId || 'default';
+    tenantId = tenantId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+
+    if (!tenantId) {
+      this.logger.warn(
+        `Message is missing valid tenantId. Deleting message. ID: ${eventId}`,
+      );
+      await this.deleteMessage(message.ReceiptHandle);
+      return;
+    }
+
+    const inboxId = `${tenantId}:${eventId}:${handlerName}`;
 
     let reserved = false;
     try {
-      // 1. Inbox Pattern: Attempt atomic reservation using DB primary key constraint
+      // 1. Inbox reservation transactionally
       try {
-        await this.processedRepo.save(
-          this.processedRepo.create({
-            eventId,
-            handlerName,
+        await this.inboxRepo.save(
+          this.inboxRepo.create({
+            id: inboxId,
+            tenantId,
           }),
         );
         reserved = true;
       } catch (dbError: any) {
-        // Code 23505 is standard PG unique violation. Or we just catch any insert failure as duplicate
         this.logger.warn(
-          `Message ${eventId} already processed/reserved by ${handlerName}. Skipping and deleting.`,
+          `Message ${eventId} already processed/reserved. Skipping.`,
         );
         await this.deleteMessage(message.ReceiptHandle);
         return;
       }
 
-      // 2. Process message contents within the original tenant context
-      let tenantId = body.tenantId || 'default';
-      // Sanitize the tenant identifier consistently across all entry points
-      tenantId = tenantId
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, '');
-      if (!tenantId) {
-        tenantId = 'default';
-      }
-
+      // 2. Process within the tenant context scope
       await this.tenantContext.run(tenantId, async () => {
         if (eventType === 'ADVICE_GENERATED') {
           const payload = body.payload || {};
-          const adviceId = payload.adviceId;
+          const adviceId = payload.adviceId || 'unknown';
 
-          // Log audit event within tenant context
           await this.auditLogService.log(
             'ADVICE_MESSAGE_PROCESSED',
             'Advice',
-            adviceId || 'unknown',
+            adviceId,
             'system',
             { eventId, payload },
           );
 
-          // Dispatch integration webhook call
-          await this.publicIntegrationService.sendAdviceGenerated({
-            adviceId,
-            tenantId,
-            matchId: payload.matchId,
-            market: payload.market,
-            selection: payload.selection,
-            confidence: payload.confidence,
-          });
-
           this.logger.log(
-            `Successfully processed ADVICE_GENERATED event: ${eventId} for Advice ID: ${adviceId} (Tenant: ${tenantId})`,
+            `Processed ADVICE_GENERATED event: ${eventId} for Advice: ${adviceId}`,
           );
         } else {
-          this.logger.warn(`Unknown message type: ${eventType}. Ignoring.`);
+          this.logger.warn(`Unknown message type: ${eventType}. Skipping.`);
         }
       });
 
-      // 3. Delete from SQS only after successful commit/processing
+      // 3. Delete from SQS
       await this.deleteMessage(message.ReceiptHandle);
     } catch (error) {
       this.logger.error(`Failed to process SQS message:`, error);
-      // Rollback reservation so the message can be safely retried by SQS visibility logic
       if (reserved) {
         try {
-          await this.processedRepo.delete({ eventId, handlerName });
+          await this.inboxRepo.delete({ id: inboxId });
         } catch (delError) {
           this.logger.error(
             `Failed to rollback reservation for message ${eventId}:`,

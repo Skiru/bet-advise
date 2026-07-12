@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AdviceEntity } from './entities/advice.entity';
-import { Advice } from '../domain/advice.entity';
-import { AdviceStatus } from '../domain/advice-status.enum';
+import { Advice, AdviceDecision } from '../domain/advice.entity';
 
 @Injectable()
 export class AdviceMapper {
@@ -12,11 +11,16 @@ export class AdviceMapper {
       entity.matchId,
       entity.market,
       entity.selection,
-      entity.confidence,
+      entity.decision as AdviceDecision,
+      entity.rejectionReason,
+      entity.expectedValue ? Number(entity.expectedValue) : null,
+      entity.edge ? Number(entity.edge) : null,
+      entity.calibratedProbability
+        ? Number(entity.calibratedProbability)
+        : null,
+      entity.modelVersion,
+      entity.oddsQuoteId,
       entity.rationale,
-      entity.status as AdviceStatus,
-      entity.createdAt,
-      entity.updatedAt,
     );
   }
 
@@ -27,11 +31,17 @@ export class AdviceMapper {
     entity.matchId = domain.matchId;
     entity.market = domain.market;
     entity.selection = domain.selection;
-    entity.confidence = domain.confidence;
+    entity.decision = domain.decision;
+    entity.rejectionReason = domain.rejectionReason;
+    entity.expectedValue = domain.expectedValue;
+    entity.edge = domain.edge;
+    entity.calibratedProbability = domain.calibratedProbability;
+    entity.modelVersion = domain.modelVersion;
+    entity.oddsQuoteId = domain.oddsQuoteId;
     entity.rationale = domain.rationale;
-    entity.status = domain.status;
     entity.createdAt = domain.createdAt;
     entity.updatedAt = domain.updatedAt;
     return entity;
   }
 }
+export { AdviceMapper as default };
