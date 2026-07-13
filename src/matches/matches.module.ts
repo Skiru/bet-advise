@@ -11,9 +11,10 @@ import { MatchesController } from './interfaces/http/matches.controller';
 import { MATCHES_MODULE_API } from './interfaces/module-api/matches-module.api.interface';
 import { MatchesModuleApi } from './interfaces/module-api/matches-module.api';
 import { MatchMapper } from './infrastructure/match.mapper';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [CqrsModule, TypeOrmModule.forFeature([MatchEntity])],
+  imports: [CqrsModule, TypeOrmModule.forFeature([MatchEntity]), AuthModule],
   controllers: [MatchesController],
   providers: [
     MatchMapper,

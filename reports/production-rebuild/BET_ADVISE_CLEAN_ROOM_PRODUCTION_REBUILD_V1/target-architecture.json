@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "BET_ADVISE_CLEAN_ROOM_PRODUCTION_REBUILD_V1",
+  "repository": "Skiru/bet-advise",
+  "packageName": "bet-advise",
+  "cleanStartSha": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "currentHead": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "timestampUtc": "2026-07-12T22:03:29Z",
+  "targetArchitecture": {
+    "type": "Modular Monolith",
+    "runtimes": {
+      "api": {
+        "bootstrap": "src/bootstrap/api.main.ts",
+        "module": "ApiAppModule",
+        "responsibilities": ["HTTP REST Endpoints", "OIDC Auth", "Request-level tenancy, rate-limiting", "Swagger UI under permissions"]
+      },
+      "worker": {
+        "bootstrap": "src/bootstrap/worker.main.ts",
+        "module": "WorkerAppModule",
+        "responsibilities": ["Outbox Polling and Relay", "SQS Consumer with duplicate handling", "Scheduled ingestion, drift, and analysis jobs"]
+      }
+    },
+    "modules": [
+      {
+        "name": "auth",
+        "layers": ["interfaces", "application", "domain"],
+        "dependencies": ["shared"],
+        "purpose": "OAuth 2.0/OIDC Resource Server signature, algorithm, issuer, and scope validations"
+      },
+      {
+        "name": "tenancy",
+        "layers": ["infrastructure", "application", "domain"],
+        "dependencies": ["shared"],
+        "purpose": "Strict tenant isolation via verified JWT claim context and PostgreSQL Row-Level Security (RLS) enforcement"
+      },
+      {
+        "name": "matches",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared", "tenancy"],
+        "purpose": "Maintains sports matches, lifecycle states, and participant info with strict transition rules"
+      },
+      {
+        "name": "providers",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared", "tenancy"],
+        "purpose": "Maintains data provider definitions, capabilities, rate limits, and ingestion jobs with a solid fail-closed mode"
+      },
+      {
+        "name": "odds",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared", "matches", "providers"],
+        "purpose": "Ingests and normalizes bookmaker odds quotes, validating odds value ranges (>1) and structural coherence"
+      },
+      {
+        "name": "analysis",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared", "matches", "providers", "odds"],
+        "purpose": "Builds point-in-time analytical features, executes versioned prediction models with time-aware walks, calculates no-vig market probabilities"
+      },
+      {
+        "name": "advice",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared", "analysis", "matches", "odds", "audit"],
+        "purpose": "Advice engine that evaluates expectation edge/uncertainty gates, creating RECOMMENDED, REJECTED, or ABSTAINED advice with full audit provenance"
+      },
+      {
+        "name": "coupons",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared", "advice", "tenancy"],
+        "purpose": "Optimizer that builds manual CouponDraft objects based on calibrated advice, expectations, same-event dependencies, and concentration thresholds"
+      },
+      {
+        "name": "audit",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared"],
+        "purpose": "Auditable log vault tracking tenant/principal activities, feature calculations, and model updates"
+      },
+      {
+        "name": "outbox",
+        "layers": ["domain", "application", "interfaces", "infrastructure"],
+        "dependencies": ["shared"],
+        "purpose": "Transactional outbox pattern with FOR UPDATE SKIP LOCKED batch claiming and exponential backoff"
+      },
+      {
+        "name": "shared",
+        "layers": ["infrastructure", "domain"],
+        "dependencies": [],
+        "purpose": "Common helpers, domain Result objects, UUID utilities, and client factories for AWS (S3, SQS), Redis, and database pools"
+      }
+    ]
+  }
+}

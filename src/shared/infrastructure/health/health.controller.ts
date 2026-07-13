@@ -9,6 +9,7 @@ import { S3HealthIndicator } from './s3-health.indicator';
 import { SqsHealthIndicator } from './sqs-health.indicator';
 import { MiniStackHealthIndicator } from './ministack-health.indicator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Public } from '../../../auth/interfaces/http/decorators/public.decorator';
 
 @ApiTags('Health')
 @Controller('health')
@@ -23,6 +24,7 @@ export class HealthController {
   ) {}
 
   @Get('live')
+  @Public()
   @ApiOperation({ summary: 'Liveness check' })
   getLive() {
     return {
@@ -33,6 +35,7 @@ export class HealthController {
   }
 
   @Get('ready')
+  @Public()
   @HealthCheck()
   @ApiOperation({ summary: 'Readiness check' })
   getReady() {

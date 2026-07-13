@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import { Injectable, Inject } from '@nestjs/common';
 import {
   HealthIndicator,

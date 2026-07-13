@@ -10,19 +10,29 @@ export class TenantContext {
   private static readonly asyncLocalStorage =
     new AsyncLocalStorage<TenantStore>();
 
-  /**
-   * Runs a function within the context of a given tenant ID.
-   */
   public run<T>(tenantId: string, callback: () => T): T {
-    return TenantContext.asyncLocalStorage.run({ tenantId }, callback);
+    const sanitized = tenantId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+    if (!sanitized) {
+      throw new Error(
+        'Tenant context cannot be resolved with empty or invalid identifier.',
+      );
+    }
+    return TenantContext.asyncLocalStorage.run(
+      { tenantId: sanitized },
+      callback,
+    );
   }
 
-  /**
-   * Retrieves the current tenant ID from the active context.
-   * Defaults to 'default' if no tenant context is set (e.g., background tasks, system queries).
-   */
   public getTenantId(): string {
     const store = TenantContext.asyncLocalStorage.getStore();
-    return store?.tenantId || 'default';
+    if (!store?.tenantId) {
+      throw new Error(
+        'Tenant isolation breach: no active tenant context was set.',
+      );
+    }
+    return store.tenantId;
   }
 }

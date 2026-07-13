@@ -8,6 +8,9 @@ export interface IMatchRepository {
     awayTeam: string;
     kickoffAt: Date;
     externalId?: string;
+    sport?: string;
+    competition?: string;
+    participants?: string[];
   }): Promise<Match>;
 }
 

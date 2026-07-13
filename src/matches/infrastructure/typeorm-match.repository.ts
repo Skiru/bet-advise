@@ -28,7 +28,7 @@ export class TypeOrmMatchRepository implements IMatchRepository {
   async findAll(): Promise<Match[]> {
     const entities = await this.repo.find({
       where: { tenantId: this.tenantContext.getTenantId() },
-      order: { kickoffAt: 'ASC' },
+      order: { scheduledStart: 'ASC' },
     });
     return entities.map((entity) => this.mapper.toDomain(entity));
   }
@@ -38,15 +38,21 @@ export class TypeOrmMatchRepository implements IMatchRepository {
     awayTeam: string;
     kickoffAt: Date;
     externalId?: string;
+    sport?: string;
+    competition?: string;
+    participants?: string[];
   }): Promise<Match> {
     const entity = this.repo.create({
       id: generateUuidV7(),
       tenantId: this.tenantContext.getTenantId(),
       homeTeam: data.homeTeam,
       awayTeam: data.awayTeam,
-      kickoffAt: data.kickoffAt,
+      scheduledStart: data.kickoffAt,
       externalId: data.externalId || null,
       status: 'SCHEDULED',
+      sport: data.sport || 'soccer',
+      competition: data.competition || 'default-league',
+      participants: data.participants || [],
     });
     const saved = await this.repo.save(entity);
     return this.mapper.toDomain(saved);

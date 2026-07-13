@@ -24,3 +24,9 @@ export class InvalidDomainStateError extends DomainError {
     super(message);
   }
 }
+
+export class ProviderNotConfiguredError extends DomainError {
+  constructor(providerName: string) {
+    super(`Provider ${providerName} is not configured.`);
+  }
+}

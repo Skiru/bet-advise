@@ -4,8 +4,8 @@ export class AdviceContractDto {
     public readonly matchId: string,
     public readonly market: string,
     public readonly selection: string,
-    public readonly confidence: number,
+    public readonly calibratedProbability: number | null,
     public readonly rationale: string,
-    public readonly status: string,
+    public readonly decision: string,
   ) {}
 }

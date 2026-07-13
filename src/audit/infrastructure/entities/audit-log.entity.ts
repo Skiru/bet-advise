@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import {
   Entity,
   PrimaryColumn,
@@ -13,27 +13,27 @@ import {
 @Index(['createdAt'])
 @Index(['tenantId'])
 export class AuditLogEntity {
-  @PrimaryColumn()
+  @PrimaryColumn('uuid')
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 50, default: 'default' })
+  @Column({ name: 'tenant_id', type: 'varchar', length: 255 })
   tenantId!: string;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   actor!: string | null;
 
-  @Column()
+  @Column({ type: 'varchar', length: 100 })
   action!: string;
 
-  @Column()
+  @Column({ name: 'entity_name', type: 'varchar', length: 100 })
   entityType!: string;
 
-  @Column()
+  @Column({ name: 'entity_id', type: 'varchar', length: 100 })
   entityId!: string;
 
-  @Column({ type: 'jsonb', nullable: true })
-  payload!: any | null;
+  @Column({ type: 'jsonb' })
+  payload!: any;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
   createdAt!: Date;
 }

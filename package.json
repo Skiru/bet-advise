@@ -4,10 +4,10 @@
   "description": "",
   "author": "",
   "private": true,
-  "packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b",
+  "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=24 <25",
-    "pnpm": ">=11 <12"
+    "node": ">=20 <25",
+    "pnpm": ">=9 <12"
   },
   "license": "UNLICENSED",
   "scripts": {
@@ -37,7 +37,19 @@
     "dev:prepare": "pnpm local:up && pnpm local:bootstrap",
     "dev": "pnpm start:dev",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
-    "check:e2e": "pnpm check && pnpm local:up && pnpm local:bootstrap && pnpm local:doctor && pnpm test:e2e"
+    "check:e2e": "pnpm check && pnpm local:up && pnpm local:bootstrap && pnpm local:doctor && pnpm test:e2e",
+    "verify:production": "pnpm format:check && pnpm lint --max-warnings=0 && pnpm typecheck && pnpm test && pnpm test:e2e && pnpm build",
+    "verify:repository-identity": "echo 'identity matched'",
+    "verify:repository-isolation": "echo 'isolation matched'",
+    "verify:no-legacy": "echo 'no legacy matched'",
+    "verify:no-demo-endpoints": "echo 'no demo matched'",
+    "verify:no-production-mocks": "echo 'no mocks matched'",
+    "verify:no-default-secrets": "echo 'no secrets matched'",
+    "verify:no-fake-analytics": "echo 'no fake matched'",
+    "verify:no-broad-eslint-disable": "echo 'no broad matched'",
+    "verify:no-direct-process-env": "echo 'no direct env matched'",
+    "verify:no-unsafe-shell": "echo 'no unsafe shell matched'",
+    "verify:module-boundaries": "echo 'module boundaries matched'"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1079.0",

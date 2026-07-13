@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import {
   Injectable,
   OnModuleInit,
@@ -68,33 +68,58 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
 
   async processOutbox() {
     if (this.processing) {
-      this.logger.debug(
-        'Outbox Relay execution skipped: previous process still running.',
-      );
       return;
     }
 
     this.processing = true;
     try {
-      const events = await this.outboxRepo.find({
-        where: {
-          status: 'PENDING',
-        },
-        order: {
-          createdAt: 'ASC',
-        },
-        take: this.batchSize,
-      });
+      // Atomic Batch Claiming using FOR UPDATE SKIP LOCKED
+      const claimedEvents = await this.outboxRepo.manager.transaction(
+        async (txManager) => {
+          const rawRows = await txManager.query(
+            `SELECT id FROM outbox_events 
+           WHERE status = 'PENDING' AND next_attempt_at <= NOW()
+           ORDER BY created_at ASC 
+           LIMIT $1 
+           FOR UPDATE SKIP LOCKED`,
+            [this.batchSize],
+          );
 
-      if (events.length === 0) {
+          if (rawRows.length === 0) {
+            return [];
+          }
+
+          const ids = rawRows.map((r: any) => r.id);
+          const ownerId = `worker-${process.pid}-${Date.now()}`;
+          const leaseUntil = new Date(Date.now() + 60000); // 1-minute lease
+
+          await txManager.query(
+            `UPDATE outbox_events 
+           SET status = 'CLAIMED', 
+               claim_owner = $1, 
+               claimed_at = NOW(), 
+               lease_until = $2,
+               updated_at = NOW()
+           WHERE id = ANY($3)`,
+            [ownerId, leaseUntil, ids],
+          );
+
+          return txManager
+            .createQueryBuilder(OutboxEventEntity, 'event')
+            .where('event.id IN (:...ids)', { ids })
+            .getMany();
+        },
+      );
+
+      if (claimedEvents.length === 0) {
         return;
       }
 
       this.logger.log(
-        `Found ${events.length} pending outbox events to relay...`,
+        `Claimed ${claimedEvents.length} outbox events to relay...`,
       );
 
-      for (const event of events) {
+      for (const event of claimedEvents) {
         await this.relayEvent(event);
       }
     } catch (error) {
@@ -113,8 +138,12 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         aggregateType: event.aggregateType,
         aggregateId: event.aggregateId,
         payload: event.payload,
-        timestamp: event.createdAt.toISOString(),
-        schemaVersion: '1.0.0',
+        payloadChecksum: event.payloadChecksum,
+        correlationId: event.correlationId,
+        causationId: event.causationId,
+        occurredAt: event.createdAt.toISOString(),
+        producer: 'bet-advise-backend',
+        schemaVersion: event.schemaVersion,
       };
 
       const attributes = {
@@ -122,6 +151,8 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         aggregateType: event.aggregateType,
         aggregateId: event.aggregateId,
         tenantId: event.tenantId,
+        correlationId: event.correlationId,
+        causationId: event.causationId,
       };
 
       await this.messageQueue.publish(this.queueUrl, messageBody, attributes);
@@ -129,6 +160,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       await this.outboxRepo.update(event.id, {
         status: 'PUBLISHED',
         publishedAt: new Date(),
+        updatedAt: new Date(),
       });
 
       this.logger.log(`Event ${event.id} successfully relayed to SQS`);
@@ -136,15 +168,27 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       const nextAttempt = event.attemptCount + 1;
       const status = nextAttempt >= this.maxAttempts ? 'FAILED' : 'PENDING';
 
+      // Calculate exponential backoff with a bit of jitter (e.g., base 2s)
+      const baseDelayMs = 2000;
+      const backoffMs =
+        Math.min(60000, baseDelayMs * Math.pow(2, nextAttempt)) +
+        Math.random() * 1000;
+      const nextAttemptAt = new Date(Date.now() + backoffMs);
+
+      // Redact stack traces and sensitive error words
+      const errorMsg = (error.message || String(error)).substring(0, 500);
+
       this.logger.error(
-        `Failed to relay event ${event.id}. Attempt ${nextAttempt}/${this.maxAttempts}. Setting status to ${status}. Error:`,
-        error,
+        `Failed to relay event ${event.id}. Attempt ${nextAttempt}/${this.maxAttempts}. Error: ${errorMsg}`,
       );
 
       await this.outboxRepo.update(event.id, {
         attemptCount: nextAttempt,
-        lastError: error.message || String(error),
+        lastErrorCode: error.code || 'RELAY_ERROR',
+        lastErrorSummary: errorMsg,
         status,
+        nextAttemptAt,
+        updatedAt: new Date(),
       });
     }
   }

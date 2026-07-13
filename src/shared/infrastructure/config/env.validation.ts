@@ -43,4 +43,9 @@ export const envValidationSchema = Joi.object({
   JWT_AUDIENCE: Joi.string().default('mobile-app'),
   JWT_ACCESS_TOKEN_TTL: Joi.string().default('60m'),
   JWT_REFRESH_TOKEN_TTL: Joi.string().default('365d'),
+  JWT_JWKS_URI: Joi.string().allow('').optional(),
+  JWT_ALGORITHMS: Joi.string().default('RS256,HS256'),
+  JWT_TENANT_CLAIM_NAME: Joi.string().default('tenant_id'),
+  JWT_CLOCK_SKEW: Joi.number().integer().min(0).default(60),
+  JWT_JWKS_CACHE_DURATION: Joi.number().integer().min(0).default(300000),
 });

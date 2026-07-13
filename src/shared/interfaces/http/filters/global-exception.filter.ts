@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Narrowly scoped lint exception for TypeORM/AWS SQS JSONB dynamic payload mappings
 import {
   ExceptionFilter,
   Catch,
@@ -13,6 +13,7 @@ import {
   NotFoundDomainError,
   InvalidDomainOperationError,
   InvalidDomainStateError,
+  ProviderNotConfiguredError,
 } from '../../../domain/domain-error';
 
 @Catch()
@@ -49,6 +50,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       if (exception instanceof NotFoundDomainError) {
         status = HttpStatus.NOT_FOUND;
         errorCode = 'NOT_FOUND';
+      } else if (exception instanceof ProviderNotConfiguredError) {
+        status = HttpStatus.SERVICE_UNAVAILABLE;
+        errorCode = 'NO_PRODUCTION_DATA_PROVIDER';
       } else if (
         exception instanceof InvalidDomainOperationError ||
         exception instanceof InvalidDomainStateError
@@ -74,23 +78,33 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       errorCode = 'CLOUD_DEPENDENCY_UNAVAILABLE';
     }
 
-    // Log the error with correlation ID
     const errorMsg =
       exception instanceof Error ? exception.message : String(exception);
     const stack = exception instanceof Error ? exception.stack : undefined;
+
+    // Structured JSON log with redacted values and correlation IDs
     this.logger.error(
-      `[CorrelationId: ${correlationId}] Caught exception: ${errorCode} - ${errorMsg}`,
-      stack,
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        severity: 'ERROR',
+        service: 'bet-advise-backend',
+        correlationId,
+        errorCode,
+        message: this.redactSecrets(errorMsg),
+        stack: stack ? this.redactSecrets(stack) : undefined,
+      }),
     );
 
+    // RFC 9457-compatible problem details
     response.status(status).json({
-      statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-      message,
+      type: `https://api.bet-advise.com/errors/${errorCode.toLowerCase()}`,
+      title: message,
+      status,
+      detail: message,
+      instance: request.url,
       errorCode,
-      ...(details ? { details } : {}),
       correlationId,
+      ...(details ? { invalidParams: details } : {}),
     });
   }
 
@@ -99,11 +113,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const name = error.constructor?.name || '';
     const msg = error.message || '';
     return (
-      name.startsWith('PrismaClient') ||
-      msg.includes('Prisma') ||
+      name.includes('QueryFailedError') ||
+      name.includes('TypeORMError') ||
       msg.includes('database') ||
       msg.includes('connection') ||
-      msg.includes('Postgres')
+      msg.includes('Postgres') ||
+      msg.includes('protocol')
     );
   }
 
@@ -127,5 +142,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       msg.includes('SQS') ||
       msg.includes('AWS')
     );
+  }
+
+  private redactSecrets(str: string): string {
+    return str
+      .replace(/Bearer\s+[a-zA-Z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]')
+      .replace(/password=\w+/gi, 'password=[REDACTED]')
+      .replace(/postgres:\/\/[^@]+@/gi, 'postgres://[REDACTED]@');
   }
 }

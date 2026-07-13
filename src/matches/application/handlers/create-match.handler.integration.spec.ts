@@ -1,19 +1,19 @@
-/* eslint-disable */
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from '../../../app.module';
 import { CreateMatchHandler } from './create-match.handler';
 import { CreateMatchCommand } from '../commands/create-match.command';
 import { MATCH_REPOSITORY_PORT } from '../ports/match-repository.port';
 import { IMatchRepository } from '../ports/match-repository.port';
+import { TenantContext } from '../../../shared/infrastructure/tenant/tenant-context';
 
 describe('CreateMatchHandler Integration', () => {
   let module: TestingModule;
   let handler: CreateMatchHandler;
   let repository: IMatchRepository;
+  let tenantContext: TenantContext;
   const createdMatchIds: string[] = [];
 
   beforeAll(async () => {
-    // Suppress polling log spam if any
     process.env.SQS_WAIT_TIME_SECONDS = '1';
 
     module = await Test.createTestingModule({
@@ -24,13 +24,19 @@ describe('CreateMatchHandler Integration', () => {
 
     handler = module.get<CreateMatchHandler>(CreateMatchHandler);
     repository = module.get<IMatchRepository>(MATCH_REPOSITORY_PORT);
+    tenantContext = module.get<TenantContext>(TenantContext);
   });
 
   afterAll(async () => {
-    // Clean up created entities from database
-    const matchRepo = (repository as any).repo; // Accessing the TypeORM repository under the hood
+    const matchRepo = (
+      repository as unknown as {
+        repo: { delete: (ids: string[]) => Promise<unknown> };
+      }
+    ).repo;
     if (matchRepo && createdMatchIds.length > 0) {
-      await matchRepo.delete(createdMatchIds);
+      await tenantContext.run('default', async () => {
+        await matchRepo.delete(createdMatchIds);
+      });
     }
     await module.close();
   });
@@ -45,7 +51,10 @@ describe('CreateMatchHandler Integration', () => {
       externalId,
     );
 
-    const match = await handler.execute(command);
+    const match = await tenantContext.run('default', async () => {
+      return handler.execute(command);
+    });
+
     expect(match.id).toBeDefined();
     createdMatchIds.push(match.id);
 
@@ -53,8 +62,10 @@ describe('CreateMatchHandler Integration', () => {
     expect(match.awayTeam).toBe('Database United');
     expect(match.externalId).toBe(externalId);
 
-    // Verify it actually persisted in the database by retrieving it
-    const persisted = await repository.findById(match.id);
+    const persisted = await tenantContext.run('default', async () => {
+      return repository.findById(match.id);
+    });
+
     expect(persisted).not.toBeNull();
     expect(persisted!.id).toBe(match.id);
     expect(persisted!.homeTeam).toBe('Integration FC');

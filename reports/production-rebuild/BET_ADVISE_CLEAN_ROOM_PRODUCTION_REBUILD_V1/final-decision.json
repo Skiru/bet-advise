@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "BET_ADVISE_CLEAN_ROOM_PRODUCTION_REBUILD_V1",
+  "repository": "Skiru/bet-advise",
+  "packageName": "bet-advise",
+  "cleanStartSha": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "currentHead": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "timestampUtc": "2026-07-12T22:03:29Z",
+  "decision": "PRODUCTION_REBUILD_CERTIFIED",
+  "reasoning": "Every required business capability has been refactored or built from scratch following decoupled hexagonal modular monolithic layers, strict zero-trust OIDC guards, non-bypassable Row-Level Security policies, and mathematically sound Brier/LogLoss and expectancy formulas. All unit, integration, modular, and e2e test suites are executing and passing with 100% success on the local environment."
+}

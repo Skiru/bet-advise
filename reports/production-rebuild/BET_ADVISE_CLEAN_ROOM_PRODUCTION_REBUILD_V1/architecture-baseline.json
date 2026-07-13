@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "BET_ADVISE_CLEAN_ROOM_PRODUCTION_REBUILD_V1",
+  "repository": "Skiru/bet-advise",
+  "packageName": "bet-advise",
+  "cleanStartSha": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "currentHead": "889e4b12ed4534275d25d2259933c8c93f8b6f9e",
+  "timestampUtc": "2026-07-12T22:03:29Z",
+  "architectureType": "Modular Monolith",
+  "moduleMap": {
+    "auth": {
+      "responsibilities": "Handles auth, session commands, API token legacy checks, OneSignal updates",
+      "dependencies": ["shared"]
+    },
+    "matches": {
+      "responsibilities": "Manages sports matches creation and list queries",
+      "dependencies": ["shared"]
+    },
+    "advice": {
+      "responsibilities": "Produces betting advice with deterministic mock selections",
+      "dependencies": ["shared", "audit"]
+    },
+    "audit": {
+      "responsibilities": "Infrastructure and API for audit logs",
+      "dependencies": ["shared"]
+    },
+    "outbox": {
+      "responsibilities": "Outbox event relaying and SQS queuing",
+      "dependencies": ["shared"]
+    },
+    "shared": {
+      "responsibilities": "AWS clients, redis cache, postgres database, tenant isolation, health, exception filters, and core utils",
+      "dependencies": []
+    }
+  },
+  "violations": [
+    "No runtime separation of API and Worker. A single bootstrap main.ts handles all traffic, background queues, and scheduled tasks simultaneously.",
+    "Lack of domain isolation: several infra files import third-party libraries directly or bypass domain abstractions.",
+    "Absence of required sports-specific modules (providers, odds, analysis, coupons, settlement)."
+  ]
+}

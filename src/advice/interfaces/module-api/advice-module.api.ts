@@ -21,9 +21,9 @@ export class AdviceModuleApi implements IAdviceModuleApi {
             a.matchId,
             a.market,
             a.selection,
-            a.confidence,
+            a.calibratedProbability,
             a.rationale,
-            a.status,
+            a.decision,
           ),
       );
     } catch {
